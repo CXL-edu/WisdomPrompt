@@ -6,9 +6,9 @@ from app.providers.llm import get_llm
 
 
 @pytest.mark.asyncio
-async def test_openai_split_query_live():
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+async def test_nvidia_split_query_live():
+    if not os.getenv("NVIDIA_API_KEY"):
+        pytest.skip("NVIDIA_API_KEY not set")
 
     llm = get_llm()
     prompt = (
