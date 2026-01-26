@@ -9,6 +9,7 @@ __pycache__/
 node_modules/
 .DS_Store
 *.egg-info/
-*test*
+*test*.py
+*.test.*
 
 docs/
