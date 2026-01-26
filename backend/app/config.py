@@ -12,21 +12,21 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./wisdomprompt.db"
 
     # LLM
-    llm_provider: str = "mock"  # mock|openai
+    llm_provider: str = "openai"  # openai
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"
 
-    # Embeddings
-    embedding_provider: str = "hash"  # hash|openai
-    openai_embedding_model: str = "text-embedding-3-small"
-
     # Vector store
-    vector_store: str = "mock"  # mock|milvus
+    vector_store: str = "milvus"  # milvus
     embedding_dim: int = 384
     milvus_uri: str | None = None
     milvus_token: str | None = None
     milvus_collection: str = "wisdomprompt_docs"
+    milvus_id_field: str = "id"
+    milvus_text_field: str = "content"
+    milvus_vector_field: str = "vector"
+    milvus_metadata_field: str = "metadata"
 
     # Search providers
     exa_api_key: str | None = None
