@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Protocol, cast
 
 
@@ -24,6 +25,38 @@ class VectorStore(Protocol):
 
     def search(self, query_text: str, *, top_k: int) -> list[VectorHit]:
         ...
+
+
+class MockVectorStore(VectorStore):
+    def __init__(self):
+        self._docs: dict[str, VectorDoc] = {}
+
+    def upsert(self, docs: list[VectorDoc]) -> None:
+        for d in docs:
+            self._docs[d.id] = d
+
+    def search(self, query_text: str, *, top_k: int) -> list[VectorHit]:
+        # Simple token-overlap score to support offline dev/tests.
+        q = _tokenize(query_text)
+        hits: list[VectorHit] = []
+        for d in self._docs.values():
+            score = _overlap_score(q, _tokenize(d.content))
+            hits.append(VectorHit(id=d.id, score=score, metadata=d.metadata))
+        hits.sort(key=lambda h: h.score, reverse=True)
+        return hits[:top_k]
+
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _tokenize(text: str) -> set[str]:
+    return set(_TOKEN_RE.findall(text.lower()))
+
+
+def _overlap_score(a: set[str], b: set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    return len(a & b) / float(len(a))
 
 
 class MilvusVectorStore(VectorStore):

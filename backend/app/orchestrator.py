@@ -31,7 +31,7 @@ from app.providers.search.base import SearchProvider
 from app.providers.search.exa import ExaProvider
 from app.providers.search.github import GitHubCodeSearchProvider
 from app.providers.search.serper import SerperProvider
-from app.providers.vector_store import MilvusVectorStore, VectorDoc
+from app.providers.vector_store import MilvusVectorStore, MockVectorStore, VectorDoc
 
 
 def _hash_obj(obj: object) -> str:
@@ -61,19 +61,21 @@ def _read_prompt(name: str) -> str:
 
 
 def _vector_store():
-    if settings.vector_store != "milvus":
-        raise RuntimeError("VECTOR_STORE must be 'milvus'")
-    if not settings.milvus_uri:
-        raise RuntimeError("VECTOR_STORE=milvus but MILVUS_URI is not set")
-    return MilvusVectorStore(
-        uri=settings.milvus_uri,
-        token=settings.milvus_token,
-        collection=settings.milvus_collection,
-        id_field=settings.milvus_id_field,
-        text_field=settings.milvus_text_field,
-        vector_field=settings.milvus_vector_field,
-        metadata_field=settings.milvus_metadata_field,
-    )
+    if settings.vector_store == "milvus":
+        if not settings.milvus_uri:
+            raise RuntimeError("VECTOR_STORE=milvus but MILVUS_URI is not set")
+        return MilvusVectorStore(
+            uri=settings.milvus_uri,
+            token=settings.milvus_token,
+            collection=settings.milvus_collection,
+            id_field=settings.milvus_id_field,
+            text_field=settings.milvus_text_field,
+            vector_field=settings.milvus_vector_field,
+            metadata_field=settings.milvus_metadata_field,
+        )
+    if settings.vector_store == "mock":
+        return MockVectorStore()
+    raise RuntimeError("VECTOR_STORE must be 'mock' or 'milvus'")
 
 
 def _search_providers() -> list[SearchProvider]:
