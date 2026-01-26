@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import override
+from typing import cast, override
 
 from openai import AsyncOpenAI
 
@@ -43,7 +43,7 @@ class LLM:
         raise NotImplementedError
 
 
-class NvidiaLLM(LLM):
+class OpenAICompatibleLLM(LLM):
     _client: AsyncOpenAI
     _model: str
 
@@ -68,7 +68,7 @@ class NvidiaLLM(LLM):
         if not isinstance(tasks_obj, list) or not tasks_obj:
             return [SubtaskSuggestion(name=query.strip())]
 
-        tasks: list[object] = list(tasks_obj)
+        tasks = cast(list[object], tasks_obj)
         out: list[SubtaskSuggestion] = []
         for t in tasks:
             if isinstance(t, str) and t.strip():
@@ -125,11 +125,13 @@ class NvidiaLLM(LLM):
 
 
 def get_llm() -> LLM:
-    if settings.llm_provider != "nvidia":
-        raise RuntimeError("LLM_PROVIDER must be 'nvidia'")
     if not settings.nvidia_api_key:
-        raise RuntimeError("LLM_PROVIDER=nvidia but NVIDIA_API_KEY is not set")
-    return NvidiaLLM(api_key=settings.nvidia_api_key, base_url=settings.nvidia_base_url, model=settings.nvidia_model)
+        raise RuntimeError("NVIDIA_API_KEY is not set")
+    return OpenAICompatibleLLM(
+        api_key=settings.nvidia_api_key,
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_model,
+    )
 
 
 def parse_json_object(text: str) -> dict[str, object]:
@@ -145,13 +147,13 @@ def parse_json_object(text: str) -> dict[str, object]:
         if s.endswith("```"):
             s = s.rsplit("```", 1)[0]
 
-    obj: object = json.loads(s)
+    obj = cast(object, json.loads(s))
     if not isinstance(obj, dict):
         raise ValueError("Expected a JSON object")
 
     out: dict[str, object] = {}
 
-    obj_dict: dict[object, object] = obj
+    obj_dict = cast(dict[object, object], obj)
     for k, v in obj_dict.items():
         # Keep only string keys to avoid surprising types downstream.
         if isinstance(k, str):

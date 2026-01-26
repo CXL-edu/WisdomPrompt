@@ -12,7 +12,6 @@ from app.main import app
 def test_create_run_and_confirm_subtasks_smoke():
     if not (os.getenv("NVIDIA_API_KEY") or settings.nvidia_api_key):
         pytest.skip("NVIDIA_API_KEY not set")
-    settings.llm_provider = "nvidia"
     settings.nvidia_api_key = os.getenv("NVIDIA_API_KEY") or settings.nvidia_api_key
     # Use context manager so startup events run (DB tables created).
     with TestClient(app) as client:

@@ -18,8 +18,7 @@ class Settings(BaseSettings):
     cors_allow_origins: str = "http://localhost:5173"
     database_url: str = "sqlite:///./wisdomprompt.db"
 
-    # LLM
-    llm_provider: str = "nvidia"  # nvidia
+    # LLM (OpenAI-compatible NVIDIA endpoint)
     nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_model: str = "z-ai/glm4.7"
