@@ -23,16 +23,15 @@ from app.models import (
     Subtask,
     Summary,
 )
-from app.providers.embedder import HashEmbedder
 from pathlib import Path
 
-from app.providers.llm import LLM, MockLLM, OpenAILLM, get_llm
+from app.providers.llm import LLM, get_llm
 from app.providers.search.arxiv import ArxivProvider
 from app.providers.search.base import SearchProvider
 from app.providers.search.exa import ExaProvider
 from app.providers.search.github import GitHubCodeSearchProvider
 from app.providers.search.serper import SerperProvider
-from app.providers.vector_store import MilvusVectorStore, MockVectorStore, VectorDoc
+from app.providers.vector_store import MilvusVectorStore, VectorDoc
 
 
 def _hash_obj(obj: object) -> str:
@@ -61,21 +60,20 @@ def _read_prompt(name: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
-def _embedder():
-    return HashEmbedder(dim=settings.embedding_dim)
-
-
 def _vector_store():
-    if settings.vector_store == "milvus":
-        if not settings.milvus_uri:
-            raise RuntimeError("VECTOR_STORE=milvus but MILVUS_URI is not set")
-        return MilvusVectorStore(
-            uri=settings.milvus_uri,
-            token=settings.milvus_token,
-            collection=settings.milvus_collection,
-            dim=settings.embedding_dim,
-        )
-    return MockVectorStore()
+    if settings.vector_store != "milvus":
+        raise RuntimeError("VECTOR_STORE must be 'milvus'")
+    if not settings.milvus_uri:
+        raise RuntimeError("VECTOR_STORE=milvus but MILVUS_URI is not set")
+    return MilvusVectorStore(
+        uri=settings.milvus_uri,
+        token=settings.milvus_token,
+        collection=settings.milvus_collection,
+        id_field=settings.milvus_id_field,
+        text_field=settings.milvus_text_field,
+        vector_field=settings.milvus_vector_field,
+        metadata_field=settings.milvus_metadata_field,
+    )
 
 
 def _search_providers() -> list[SearchProvider]:
@@ -101,7 +99,6 @@ async def run_from_step(db_factory: Callable[[], Session], run_id: str, from_ste
         _ensure_steps(db, run)
         vs = _vector_store()
         llm = _llm()
-        embedder = _embedder()
         providers = _search_providers()
 
         # Invalidate downstream artifacts.
@@ -112,7 +109,7 @@ async def run_from_step(db_factory: Callable[[], Session], run_id: str, from_ste
             return
 
         if from_step <= 2:
-            await _step2(db, run, embedder, vs, providers)
+            await _step2(db, run, vs, providers)
         if from_step <= 3:
             await _step3(db, run, llm)
         if from_step <= 4:
@@ -160,11 +157,8 @@ async def _step1(db: Session, run: Run, llm: LLM) -> None:
     db.commit()
     emit_event(db, run.id, "step.started", {"step": 1})
 
-    if isinstance(llm, OpenAILLM):
-        prompt = _read_prompt("step1_query_split.md")
-        suggestions = await llm.split_query_async(run.query, prompt)
-    else:
-        suggestions = llm.split_query(run.query)
+    prompt = _read_prompt("step1_query_split.md")
+    suggestions = await llm.split_query(run.query, prompt)
     # Replace existing subtasks.
     db.query(Subtask).filter(Subtask.run_id == run.id).delete()
     for i, s in enumerate(suggestions):
@@ -181,7 +175,7 @@ async def _step1(db: Session, run: Run, llm: LLM) -> None:
     emit_event(db, run.id, "step.completed", {"step": 1})
 
 
-async def _step2(db: Session, run: Run, embedder: HashEmbedder, vs, providers: list[SearchProvider]) -> None:
+async def _step2(db: Session, run: Run, vs, providers: list[SearchProvider]) -> None:
     run.status = RunStatus.running
     run.current_step = 2
     run.updated_at = dt.datetime.now(dt.UTC)
@@ -200,8 +194,7 @@ async def _step2(db: Session, run: Run, embedder: HashEmbedder, vs, providers: l
     for st in subtasks:
         emit_event(db, run.id, "retrieval.started", {"subtask_id": st.id, "subtask": st.name})
 
-        q_vec = embedder.embed(st.name).vector
-        hits = vs.search(q_vec, top_k=settings.top_k)
+        hits = vs.search(st.name, top_k=settings.top_k)
         high_hits = [h for h in hits if h.score >= settings.high_score_threshold]
 
         used_web = False
@@ -234,7 +227,7 @@ async def _step2(db: Session, run: Run, embedder: HashEmbedder, vs, providers: l
                         [
                             VectorDoc(
                                 id=doc.id,
-                                vector=embedder.embed(f"{r.title or ''}\n{r.content}").vector,
+                                content=f"{r.title or ''}\n{r.content}",
                                 metadata={
                                     "run_id": run.id,
                                     "subtask_id": st.id,
@@ -261,7 +254,7 @@ async def _step2(db: Session, run: Run, embedder: HashEmbedder, vs, providers: l
                         },
                     )
         else:
-            # Serve existing (vector) hits from DB. In mock store, docs may be missing.
+            # Serve existing (vector) hits from DB. Some hits may be missing in SQL.
             for h in high_hits:
                 doc = db.get(Document, h.id)
                 if not doc:
@@ -308,17 +301,14 @@ async def _step3(db: Session, run: Run, llm: LLM) -> None:
         docs = db.query(Document).filter(Document.run_id == run.id, Document.subtask_id == st.id).all()
         for d in docs:
             url = d.sources[0].url if d.sources else None
-            if isinstance(llm, OpenAILLM):
-                prompt = _read_prompt("step3_summarize.md")
-                summary_text = await llm.summarize_document_async(
-                    subtask=st.name,
-                    doc_title=d.title,
-                    doc_content=d.content,
-                    url=url,
-                    prompt=prompt,
-                )
-            else:
-                summary_text = llm.summarize_document(subtask=st.name, doc_title=d.title, doc_content=d.content)
+            prompt = _read_prompt("step3_summarize.md")
+            summary_text = await llm.summarize_document(
+                subtask=st.name,
+                doc_title=d.title,
+                doc_content=d.content,
+                url=url,
+                prompt=prompt,
+            )
             sm = Summary(run_id=run.id, subtask_id=st.id, document_id=d.id, summary_text=summary_text)
             db.add(sm)
             db.commit()
@@ -341,16 +331,13 @@ async def _step4(db: Session, run: Run, llm: LLM) -> None:
 
     subtasks = db.query(Subtask).filter(Subtask.run_id == run.id).order_by(Subtask.order.asc()).all()
     summaries = db.query(Summary).filter(Summary.run_id == run.id).all()
-    if isinstance(llm, OpenAILLM):
-        prompt = _read_prompt("step4_final_answer.md")
-        answer = await llm.final_answer_async(
-            query=run.query,
-            subtasks=[s.name for s in subtasks],
-            summaries=[s.summary_text for s in summaries],
-            prompt=prompt,
-        )
-    else:
-        answer = llm.final_answer(query=run.query, subtasks=[s.name for s in subtasks], summaries=[s.summary_text for s in summaries])
+    prompt = _read_prompt("step4_final_answer.md")
+    answer = await llm.final_answer(
+        query=run.query,
+        subtasks=[s.name for s in subtasks],
+        summaries=[s.summary_text for s in summaries],
+        prompt=prompt,
+    )
     db.add(FinalAnswer(run_id=run.id, content=answer))
     run.status = RunStatus.completed
     run.updated_at = dt.datetime.now(dt.UTC)

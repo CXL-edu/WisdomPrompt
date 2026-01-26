@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +13,7 @@ from app.db import SessionLocal, get_db, init_db
 from app.events import emit_event, sse_event_stream
 from app.models import Document, FinalAnswer, Run, RunStatus, Step, StepStatus, Subtask, Summary
 from app.orchestrator import run_from_step
-from app.providers.llm import MockLLM
+from app.providers.llm import get_llm
 from app.schemas import ConfirmSubtasksIn, RerunIn, RunCreateIn, RunCreatedOut, RunSnapshotOut, SubtaskIn
 
 
@@ -69,7 +70,7 @@ def _snapshot(db: Session, run: Run) -> RunSnapshotOut:
 
 
 @app.post("/api/runs", response_model=RunCreatedOut)
-def create_run(payload: RunCreateIn, db: Session = Depends(get_db)) -> RunCreatedOut:
+async def create_run(payload: RunCreateIn, db: Session = Depends(get_db)) -> RunCreatedOut:
     run = Run(query=payload.query, status=RunStatus.created, current_step=1)
     db.add(run)
     db.commit()
@@ -83,8 +84,9 @@ def create_run(payload: RunCreateIn, db: Session = Depends(get_db)) -> RunCreate
     emit_event(db, run.id, "run.created", {"query": payload.query})
 
     # Step 1: split query into subtasks (sync) and wait for confirmation.
-    llm = MockLLM()
-    suggestions = llm.split_query(payload.query)
+    llm = get_llm()
+    prompt = (Path(__file__).parent / "prompts" / "step1_query_split.md").read_text(encoding="utf-8")
+    suggestions = await llm.split_query(payload.query, prompt)
     for i, s in enumerate(suggestions):
         db.add(Subtask(run_id=run.id, name=s.name, order=i, confirmed=False))
     run.status = RunStatus.waiting_confirm
