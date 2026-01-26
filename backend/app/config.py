@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # Ignore unrelated environment variables (common in CI/dev shells).
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # App
     app_name: str = "wisdomprompt"
@@ -13,13 +19,13 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./wisdomprompt.db"
 
     # LLM
-    llm_provider: str = "mock"  # mock|openai
-    openai_api_key: str | None = None
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4o-mini"
+    llm_provider: str = "nvidia"  # nvidia
+    nvidia_api_key: str | None = None
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_model: str = "z-ai/glm4.7"
 
     # Vector store
-    vector_store: str = "mock"  # mock|milvus
+    vector_store: str = "milvus"  # milvus
     embedding_dim: int = 384
     milvus_uri: str | None = None
     milvus_token: str | None = None

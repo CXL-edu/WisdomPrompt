@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import override
 
 from openai import AsyncOpenAI
 
@@ -15,6 +16,7 @@ class SubtaskSuggestion:
 
 class LLM:
     async def split_query(self, query: str, prompt: str) -> list[SubtaskSuggestion]:
+        _ = (query, prompt)
         raise NotImplementedError
 
     async def summarize_document(
@@ -26,6 +28,7 @@ class LLM:
         url: str | None,
         prompt: str,
     ) -> str:
+        _ = (subtask, doc_title, doc_content, url, prompt)
         raise NotImplementedError
 
     async def final_answer(
@@ -36,62 +39,20 @@ class LLM:
         summaries: list[str],
         prompt: str,
     ) -> str:
+        _ = (query, subtasks, summaries, prompt)
         raise NotImplementedError
 
 
-class MockLLM(LLM):
-    async def split_query(self, query: str, prompt: str) -> list[SubtaskSuggestion]:
-        # Minimal heuristic split: keep it as one task unless obvious separators exist.
-        _ = prompt  # unused
-        raw = query.strip()
-        parts = [p.strip() for p in raw.replace("\n", ";").split(";") if p.strip()]
-        if len(parts) <= 1:
-            return [SubtaskSuggestion(name=(parts[0] if parts else raw))]
-        return [SubtaskSuggestion(name=p) for p in parts]
+class NvidiaLLM(LLM):
+    _client: AsyncOpenAI
+    _model: str
 
-    async def summarize_document(
-        self,
-        *,
-        subtask: str,
-        doc_title: str | None,
-        doc_content: str,
-        url: str | None,
-        prompt: str,
-    ) -> str:
-        _ = (url, prompt)  # unused
-        title = (doc_title or "").strip()
-        snippet = doc_content.strip().replace("\n", " ")
-        snippet = snippet[:280] + ("..." if len(snippet) > 280 else "")
-        if title:
-            return f"[{subtask}] {title}: {snippet}"
-        return f"[{subtask}] {snippet}"
-
-    async def final_answer(
-        self,
-        *,
-        query: str,
-        subtasks: list[str],
-        summaries: list[str],
-        prompt: str,
-    ) -> str:
-        _ = prompt  # unused
-        lines = [f"Query: {query}", "", "Subtasks:"]
-        for s in subtasks:
-            lines.append(f"- {s}")
-        lines.append("")
-        lines.append("Synthesized notes:")
-        for sm in summaries:
-            lines.append(f"- {sm}")
-        lines.append("")
-        lines.append("Answer: (mock) Review the notes above and refine with real LLM providers.")
-        return "\n".join(lines)
-
-
-class OpenAILLM(LLM):
     def __init__(self, *, api_key: str, base_url: str, model: str):
+        # NVIDIA NIM is OpenAI-compatible; use OpenAI SDK with base_url override.
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._model = model
 
+    @override
     async def split_query(self, query: str, prompt: str) -> list[SubtaskSuggestion]:
         text = prompt.replace("{{QUERY}}", query)
         resp = await self._client.chat.completions.create(
@@ -103,15 +64,18 @@ class OpenAILLM(LLM):
         )
         content = resp.choices[0].message.content or ""
         obj = parse_json_object(content)
-        tasks = obj.get("tasks") or []
-        if not isinstance(tasks, list) or not tasks:
+        tasks_obj = obj.get("tasks")
+        if not isinstance(tasks_obj, list) or not tasks_obj:
             return [SubtaskSuggestion(name=query.strip())]
+
+        tasks: list[object] = list(tasks_obj)
         out: list[SubtaskSuggestion] = []
         for t in tasks:
             if isinstance(t, str) and t.strip():
                 out.append(SubtaskSuggestion(name=t.strip()))
         return out or [SubtaskSuggestion(name=query.strip())]
 
+    @override
     async def summarize_document(
         self,
         *,
@@ -136,6 +100,7 @@ class OpenAILLM(LLM):
         )
         return (resp.choices[0].message.content or "").strip()
 
+    @override
     async def final_answer(
         self,
         *,
@@ -160,17 +125,35 @@ class OpenAILLM(LLM):
 
 
 def get_llm() -> LLM:
-    if settings.llm_provider == "openai":
-        if not settings.openai_api_key:
-            raise RuntimeError("LLM_PROVIDER=openai but OPENAI_API_KEY is not set")
-        return OpenAILLM(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.openai_model)
-    return MockLLM()
+    if settings.llm_provider != "nvidia":
+        raise RuntimeError("LLM_PROVIDER must be 'nvidia'")
+    if not settings.nvidia_api_key:
+        raise RuntimeError("LLM_PROVIDER=nvidia but NVIDIA_API_KEY is not set")
+    return NvidiaLLM(api_key=settings.nvidia_api_key, base_url=settings.nvidia_base_url, model=settings.nvidia_model)
 
 
-def parse_json_object(text: str) -> dict:
+def parse_json_object(text: str) -> dict[str, object]:
+    """Parse an LLM response into a JSON object.
+
+    Handles markdown code fences and validates the result is a JSON object.
+    """
+
     s = text.strip()
     if s.startswith("```"):
+        # Drop the first fence line (may include language name).
         s = s.split("\n", 1)[1]
         if s.endswith("```"):
             s = s.rsplit("```", 1)[0]
-    return json.loads(s)
+
+    obj: object = json.loads(s)
+    if not isinstance(obj, dict):
+        raise ValueError("Expected a JSON object")
+
+    out: dict[str, object] = {}
+
+    obj_dict: dict[object, object] = obj
+    for k, v in obj_dict.items():
+        # Keep only string keys to avoid surprising types downstream.
+        if isinstance(k, str):
+            out[k] = v
+    return out
