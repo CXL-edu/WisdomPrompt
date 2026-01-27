@@ -125,13 +125,26 @@ class OpenAICompatibleLLM(LLM):
 
 
 def get_llm() -> LLM:
-    if not settings.nvidia_api_key:
-        raise RuntimeError("NVIDIA_API_KEY is not set")
-    return OpenAICompatibleLLM(
-        api_key=settings.nvidia_api_key,
-        base_url=settings.nvidia_base_url,
-        model=settings.nvidia_model,
-    )
+    provider = settings.llm_provider.lower()
+    
+    if provider == "openai":
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        return OpenAICompatibleLLM(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+            model=settings.openai_model,
+        )
+    elif provider == "nvidia":
+        if not settings.nvidia_api_key:
+            raise RuntimeError("NVIDIA_API_KEY is not set")
+        return OpenAICompatibleLLM(
+            api_key=settings.nvidia_api_key,
+            base_url=settings.nvidia_base_url,
+            model=settings.nvidia_model,
+        )
+    else:
+        raise RuntimeError(f"Unsupported LLM provider: {provider}. Supported providers: 'openai', 'nvidia'")
 
 
 def parse_json_object(text: str) -> dict[str, object]:
