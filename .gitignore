@@ -1,1 +1,7 @@
 .cursor
+.venv
+__pycache__
+*.pyc
+data/
+*.duckdb
+.env
