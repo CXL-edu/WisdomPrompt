@@ -71,14 +71,21 @@ async def _search_exa(query: str, count: int, api_key: str) -> List[dict[str, st
 
 
 async def search_web(query: str, count: int = 10) -> List[dict[str, str]]:
-    """Run web search using SEARCH_SOURCE (brave / exa / serper). Returns list of {title, url, description}."""
+    """Run web search using SEARCH_SOURCE (brave / exa / serper). Returns list of {title, url, description}. Fallback to serper/exa when brave key missing."""
     settings = get_settings()
     source = settings.SEARCH_SOURCE
-    if source == "brave":
-        return await _search_brave(query, count, settings.BRAVE_API_KEY)
-    if source == "serper":
+    if source == "brave" and settings.BRAVE_API_KEY:
+        out = await _search_brave(query, count, settings.BRAVE_API_KEY)
+        if out:
+            return out
+        logger.warning("brave_returned_empty", query=query[:80])
+    if source == "serper" or (source == "brave" and not settings.BRAVE_API_KEY):
         return await _search_serper(query, count, settings.SERPER_API_KEY)
     if source == "exa":
         return await _search_exa(query, count, settings.EXA_API_KEY)
-    logger.warning("unknown_search_source", source=source)
-    return await _search_brave(query, count, settings.BRAVE_API_KEY)
+    if settings.SERPER_API_KEY:
+        return await _search_serper(query, count, settings.SERPER_API_KEY)
+    if settings.EXA_API_KEY:
+        return await _search_exa(query, count, settings.EXA_API_KEY)
+    logger.warning("no_search_api_key")
+    return []

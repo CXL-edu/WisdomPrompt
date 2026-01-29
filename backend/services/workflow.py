@@ -43,29 +43,44 @@ async def run_workflow(
                 yield {"event": "error", "data": {"message": "cached sub_tasks required when from_step > 1"}}
                 return
 
-        # Step 2: Retrieve (vector + optional web + content fetch)
+        # Step 2: Retrieve (vector + web search + content fetch). Always run web search and merge so we have fresh, relevant content.
         if from_step <= 2:
             store = vector_store.get_vector_store()
-            query_embedding = await embedding.embed_text(query)
+            seen_urls: set[str] = set()
             for i, st in enumerate(sub_tasks):
                 yield {"event": "step2_retrieval_start", "data": {"index": i, "sub_task": st}}
                 st_embed = await embedding.embed_text(st)
-                hits = await store.search(st_embed, top_k=settings.TOP_K, min_similarity=settings.MIN_SIMILARITY_SCORE)
-                if len(hits) < settings.TOP_K:
-                    web_results = await search_service.search_web(st, count=5)
-                    for w in web_results[:3]:
-                        url = w.get("url") or ""
-                        if not url:
-                            continue
-                        try:
-                            fetched = await content_fetch.fetch_content(url)
-                            content = fetched.get("content", "")
-                            if content:
-                                emb = await embedding.embed_text(content[:8000])
-                                await store.add(content[:12000], url, fetched.get("source", "web"), emb)
-                                hits.append({"content": content[:4000], "url": url, "source": fetched.get("source"), "similarity": 0.0})
-                        except Exception as e:
-                            logger.warning("content_fetch_failed", url=url, error=str(e))
+                vector_hits = await store.search(st_embed, top_k=settings.TOP_K, min_similarity=settings.MIN_SIMILARITY_SCORE)
+                hits: List[dict] = []
+                for h in vector_hits:
+                    url = h.get("url") or ""
+                    if url:
+                        seen_urls.add(url)
+                    hits.append({"content": h.get("content", ""), "url": url, "source": h.get("source"), "similarity": h.get("similarity")})
+                logger.info("retrieval_vector_hits", sub_task=st[:60], n=len(vector_hits))
+                web_results = await search_service.search_web(st, count=8)
+                logger.info("retrieval_web_results", sub_task=st[:60], n=len(web_results))
+                n_fetched = 0
+                for w in web_results[:5]:
+                    url = (w.get("url") or "").strip()
+                    if not url or url in seen_urls:
+                        continue
+                    try:
+                        fetched = await content_fetch.fetch_content(url)
+                        content = fetched.get("content", "")
+                        if content:
+                            emb = await embedding.embed_text(content[:8000])
+                            await store.add(content[:12000], url, fetched.get("source", "web"), emb)
+                            hits.append({"content": content[:4000], "url": url, "source": fetched.get("source"), "similarity": 0.0})
+                            seen_urls.add(url)
+                            n_fetched += 1
+                    except Exception as e:
+                        logger.warning("content_fetch_failed", url=url[:80], error=str(e))
+                        snippet = (w.get("title") or "") + "\n" + (w.get("description") or "")
+                        if snippet.strip():
+                            hits.append({"content": snippet[:2000], "url": url, "source": "search_snippet", "similarity": 0.0})
+                            seen_urls.add(url)
+                logger.info("retrieval_merged", sub_task=st[:60], n_vector=len(vector_hits), n_web_fetched=n_fetched, n_total=len(hits))
                 retrieval_results.append({"sub_task": st, "hits": hits})
                 yield {"event": "step2_retrieval_done", "data": {"index": i, "sub_task": st, "hits": hits}}
         else:

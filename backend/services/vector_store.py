@@ -43,23 +43,26 @@ def _ensure_db_and_table(conn: duckdb.DuckDBPyConnection, dimension: int) -> Non
 
 
 def _sync_add(content: str, url: Optional[str], source: str, embedding: List[float], db_path: str, dimension: int) -> None:
-    conn = duckdb.connect(db_path)
     try:
-        _ensure_db_and_table(conn, dimension)
-        if url:
-            existing = conn.execute("SELECT 1 FROM knowledge WHERE url = ?", [url]).fetchone()
-            if existing:
-                logger.debug("vector_store_skip_duplicate_url", url=url)
-                return
-        embed_lit = _embedding_literal(embedding, dimension)
-        new_id = conn.execute("SELECT nextval('knowledge_id_seq')").fetchone()[0]
-        conn.execute(
-            "INSERT INTO knowledge (id, content, url, source, embedding) VALUES (?, ?, ?, ?, " + embed_lit + ")",
-            [new_id, content, url, source],
-        )
-        conn.commit()
-    finally:
-        conn.close()
+        conn = duckdb.connect(db_path)
+        try:
+            _ensure_db_and_table(conn, dimension)
+            if url:
+                existing = conn.execute("SELECT 1 FROM knowledge WHERE url = ?", [url]).fetchone()
+                if existing:
+                    logger.debug("vector_store_skip_duplicate_url", url=url)
+                    return
+            embed_lit = _embedding_literal(embedding, dimension)
+            new_id = conn.execute("SELECT nextval('knowledge_id_seq')").fetchone()[0]
+            conn.execute(
+                "INSERT INTO knowledge (id, content, url, source, embedding) VALUES (?, ?, ?, ?, " + embed_lit + ")",
+                [new_id, content, url, source],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("vector_add_failed", path=db_path, error=str(e))
 
 
 def _embedding_literal(vec: List[float], dimension: int) -> str:
@@ -71,25 +74,30 @@ def _embedding_literal(vec: List[float], dimension: int) -> str:
 def _sync_search(
     query_embedding: List[float], top_k: int, min_similarity: float, db_path: str, dimension: int
 ) -> List[dict]:
-    conn = duckdb.connect(db_path)
+    """Search with read_only when possible to avoid lock conflict with other processes (e.g. IDE)."""
+    if not os.path.exists(db_path):
+        return []
     try:
-        _ensure_db_and_table(conn, dimension)
-        qlit = _embedding_literal(query_embedding, dimension)
-        # array_cosine_similarity: 1 = same, -1 = opposite; we want >= min_similarity
-        sql = f"""
-            SELECT content, url, source, array_cosine_similarity(embedding, {qlit}) AS sim
-            FROM knowledge
-            WHERE array_cosine_similarity(embedding, {qlit}) >= ?
-            ORDER BY sim DESC
-            LIMIT ?
-            """
-        rows = conn.execute(sql, [min_similarity, top_k]).fetchall()
-        return [
-            {"content": r[0], "url": r[1], "source": r[2], "similarity": float(r[3])}
-            for r in rows
-        ]
-    finally:
-        conn.close()
+        conn = duckdb.connect(db_path, read_only=True)
+        try:
+            qlit = _embedding_literal(query_embedding, dimension)
+            sql = f"""
+                SELECT content, url, source, array_cosine_similarity(embedding, {qlit}) AS sim
+                FROM knowledge
+                WHERE array_cosine_similarity(embedding, {qlit}) >= ?
+                ORDER BY sim DESC
+                LIMIT ?
+                """
+            rows = conn.execute(sql, [min_similarity, top_k]).fetchall()
+            return [
+                {"content": r[0], "url": r[1], "source": r[2], "similarity": float(r[3])}
+                for r in rows
+            ]
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("vector_search_failed", path=db_path, error=str(e))
+        return []
 
 
 class VectorStore:

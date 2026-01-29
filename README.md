@@ -6,7 +6,7 @@
 
 - **前端**：Vite、React、Tailwind CSS、React Router、react-markdown；路由 `/`、`/about`、`/app`、`/docs`
 - **后端**：FastAPI、DuckDB + VSS、OpenAI LLM、Gemini Embedding；产品页流式 SSE
-- **搜索**：Brave / Exa / Serper（由 `.env` 的 `SEARCH_SOURCE` 选择）；正文拉取：webfetch + Jina Reader 备用
+- **搜索**：Brave / Exa / Serper（由 `.env` 的 `SEARCH_SOURCE` 选择；无 `BRAVE_API_KEY` 时自动用 Serper）；正文拉取：webfetch + Jina Reader 备用
 
 ## 快速开始
 
@@ -50,11 +50,12 @@ npm run dev
 
 ## 配置说明
 
-- **.env**（项目根）：`SEARCH_SOURCE`（brave/exa/serper）、`JINA_READER_ENABLED`、`JINA_DAILY_LIMIT_*`、`LLM_MODEL_ID`、`OPENAI_API_KEY`、`GEMINI_API_KEY`、`BRAVE_API_KEY` 等
-- 向量库与 Jina 用量文件：默认在 `data/` 下（`vectors.duckdb`、`jina_usage.json`）
+- **.env**（项目根）：`SEARCH_SOURCE`（brave/exa/serper，建议 serper 或配置好 `BRAVE_API_KEY`）、`SERPER_API_KEY`、`JINA_READER_ENABLED`、`LLM_MODEL_ID`、`OPENAI_API_KEY`、`GEMINI_API_KEY` 等
+- 向量库与 Jina 用量文件：默认在 `data/` 下（`vectors.duckdb`、`jina_usage.json`）。若出现 DuckDB 文件被占用（如 IDE 锁文件），可设置环境变量 `WISDOMPROMPT_DATA_DIR=/tmp/wisdomprompt_data` 让后端使用独立目录，或关闭占用该文件的其他进程。
 
 ## 项目结构
 
 - `backend/`：FastAPI 应用、config、prompts、services（agent、embedding、vector_store、search、content_fetch、workflow）、api
 - `frontend/`：Vite + React、四路由页面、产品页 SSE 消费与 Markdown 展示
 - `origin_idea_copy.md`：产品与研发说明
+- `backend/scripts/verify_retrieval.py`：验证检索链路（分解→向量→联网→拉取→合并），`PYTHONPATH=. python backend/scripts/verify_retrieval.py "你的问题"`
