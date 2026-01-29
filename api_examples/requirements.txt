@@ -1,0 +1,16 @@
+# API 示例所需的依赖包
+
+# 环境变量管理
+python-dotenv
+
+# HTTP 请求
+requests
+
+# Milvus 向量数据库客户端
+pymilvus
+
+# 数值计算（Milvus 示例使用）
+numpy
+
+# Exa Search API 客户端
+exa-py
