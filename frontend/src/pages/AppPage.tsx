@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const WORKFLOW_DECOMPOSE = `${API_BASE}/api/v1/workflow/decompose`;
 const WORKFLOW_STREAM = `${API_BASE}/api/v1/workflow/stream`;
 
 type SubTaskState = {
@@ -14,24 +15,78 @@ type SubTaskState = {
 
 export default function AppPage() {
   const [query, setQuery] = useState("");
-  const [running, setRunning] = useState(false);
+  const [decomposeLoading, setDecomposeLoading] = useState(false);
   const [subTasks, setSubTasks] = useState<string[]>([]);
   const [subTaskStates, setSubTaskStates] = useState<SubTaskState[]>([]);
   const [finalAnswer, setFinalAnswer] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const toggleCollapsed = useCallback((i: number) => {
     setCollapsed((c) => ({ ...c, [i]: !c[i] }));
   }, []);
 
-  const runWorkflow = useCallback(async () => {
+  const updateSubTask = useCallback((index: number, value: string) => {
+    setSubTasks((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }, []);
+
+  const removeSubTask = useCallback((index: number) => {
+    setSubTasks((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addSubTask = useCallback(() => {
+    setSubTasks((prev) => [...prev, ""]);
+  }, []);
+
+  const runDecomposeOnly = useCallback(async () => {
     if (!query.trim()) return;
+    if (streamAbortRef.current) {
+      streamAbortRef.current.abort();
+      streamAbortRef.current = null;
+    }
+    setError(null);
+    setRunning(false);
+    setSubTaskStates([]);
+    setFinalAnswer("");
+    setDecomposeLoading(true);
+    setSubTasks([]);
+    try {
+      const res = await fetch(WORKFLOW_DECOMPOSE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query.trim() }),
+      });
+      if (!res.ok) throw new Error(res.statusText || "Decompose failed");
+      const data = await res.json();
+      const tasks = (data.sub_tasks || []) as string[];
+      setSubTasks(tasks.length ? tasks : [query.trim()]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Decompose failed");
+    } finally {
+      setDecomposeLoading(false);
+    }
+  }, [query]);
+
+  const runFromStep2 = useCallback(async () => {
+    const tasks = subTasks.filter((t) => t.trim());
+    if (!query.trim() || tasks.length === 0) return;
+    if (streamAbortRef.current) {
+      streamAbortRef.current.abort();
+      streamAbortRef.current = null;
+    }
+    const ac = new AbortController();
+    streamAbortRef.current = ac;
+    const signal = ac.signal;
     setError(null);
     setRunning(true);
-    setSubTasks([]);
-    setSubTaskStates([]);
+    setSubTaskStates(tasks.map((name) => ({ name, status: "pending" as const })));
     setFinalAnswer("");
     setStreaming(false);
 
@@ -39,7 +94,12 @@ export default function AppPage() {
       const res = await fetch(WORKFLOW_STREAM, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim(), from_step: 1 }),
+        body: JSON.stringify({
+          query: query.trim(),
+          from_step: 2,
+          cached: { sub_tasks: tasks },
+        }),
+        signal,
       });
       if (!res.ok || !res.body) throw new Error(res.statusText || "Stream failed");
 
@@ -50,8 +110,10 @@ export default function AppPage() {
       let currentData = "";
 
       while (true) {
+        if (signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
+        if (signal.aborted) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
@@ -59,13 +121,10 @@ export default function AppPage() {
           if (line.startsWith("event: ")) currentEvent = line.slice(7).trim();
           else if (line.startsWith("data: ")) currentData = line.slice(6);
           else if (line === "" && currentEvent && currentData) {
+            if (signal.aborted) break;
             try {
               const data = JSON.parse(currentData);
-              if (currentEvent === "step1_sub_tasks") {
-                const tasks = (data.sub_tasks || []) as string[];
-                setSubTasks(tasks);
-                setSubTaskStates(tasks.map((name) => ({ name, status: "pending" as const })));
-              } else if (currentEvent === "step2_retrieval_start") {
+              if (currentEvent === "step2_retrieval_start") {
                 const i = data.index as number;
                 setSubTaskStates((s) =>
                   s.map((t, j) => (j === i ? { ...t, status: "loading" as const } : t))
@@ -100,16 +159,24 @@ export default function AppPage() {
         }
       }
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        if (streamAbortRef.current === ac) streamAbortRef.current = null;
+        return;
+      }
       setError(e instanceof Error ? e.message : "Request failed");
     } finally {
+      if (streamAbortRef.current === ac) streamAbortRef.current = null;
       setRunning(false);
     }
-  }, [query]);
+  }, [query, subTasks]);
 
   const copyAsMarkdown = useCallback(() => {
     if (!finalAnswer) return;
     navigator.clipboard.writeText(finalAnswer);
   }, [finalAnswer]);
+
+  const canConfirm = subTasks.some((t) => t.trim().length > 0);
+  const hasRunOnce = !running && (finalAnswer.length > 0 || subTaskStates.some((s) => s.status === "done"));
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-12">
@@ -122,29 +189,65 @@ export default function AppPage() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && runWorkflow()}
+          onKeyDown={(e) => e.key === "Enter" && runDecomposeOnly()}
           placeholder="输入你的问题..."
           className="flex-1 border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400"
-          disabled={running}
+          disabled={decomposeLoading}
         />
         <button
           type="button"
-          onClick={runWorkflow}
-          disabled={running}
+          onClick={runDecomposeOnly}
+          disabled={decomposeLoading}
           className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
         >
-          {running ? "运行中…" : "提交"}
+          {decomposeLoading ? "分解中…" : subTasks.length > 0 ? "重新分解" : "分解子任务"}
         </button>
       </div>
 
       {subTasks.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">子任务</h2>
-          <ul className="list-disc list-inside text-slate-600 space-y-1">
+          <h2 className="text-xl font-semibold text-slate-800 mb-3">子任务（可编辑，确认后执行检索）</h2>
+          <ul className="space-y-2">
             {subTasks.map((t, i) => (
-              <li key={i}>{t}</li>
+              <li key={i} className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={t}
+                  onChange={(e) => updateSubTask(i, e.target.value)}
+                  placeholder={`子任务 ${i + 1}`}
+                  className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                  disabled={running}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeSubTask(i)}
+                  disabled={running || subTasks.length <= 1}
+                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                  title="删除"
+                >
+                  ×
+                </button>
+              </li>
             ))}
           </ul>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={addSubTask}
+              disabled={running}
+              className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-100 disabled:opacity-50"
+            >
+              + 添加子任务
+            </button>
+            <button
+              type="button"
+              onClick={runFromStep2}
+              disabled={running || !canConfirm}
+              className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
+            >
+              {running ? "运行中…" : hasRunOnce ? "重新执行" : "确认并执行"}
+            </button>
+          </div>
         </section>
       )}
 

@@ -1,12 +1,24 @@
-"""SSE endpoint for product page workflow."""
+"""SSE endpoint for product page workflow; decompose-only for confirm-before-run."""
 import json
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from backend.models.schemas import WorkflowRunRequest
+from backend.models.schemas import (
+    WorkflowDecomposeRequest,
+    WorkflowDecomposeResponse,
+    WorkflowRunRequest,
+)
+from backend.services import agent
 from backend.services import workflow as workflow_service
 
 router = APIRouter()
+
+
+@router.post("/decompose", response_model=WorkflowDecomposeResponse)
+async def workflow_decompose(body: WorkflowDecomposeRequest):
+    """Only run step 1 (query decompose). Returns sub_tasks for user to edit/confirm before running retrieval."""
+    sub_tasks = await agent.decompose_query(body.query)
+    return WorkflowDecomposeResponse(sub_tasks=sub_tasks)
 
 
 @router.post("/stream")
