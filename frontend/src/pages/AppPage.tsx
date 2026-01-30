@@ -179,113 +179,171 @@ export default function AppPage() {
   const hasRunOnce = !running && (finalAnswer.length > 0 || subTaskStates.some((s) => s.status === "done"));
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">产品页</h1>
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">{error}</div>
-      )}
-      <div className="flex gap-2 mb-8">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && runDecomposeOnly()}
-          placeholder="输入你的问题..."
-          className="flex-1 border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400"
-          disabled={decomposeLoading}
-        />
-        <button
-          type="button"
-          onClick={runDecomposeOnly}
-          disabled={decomposeLoading}
-          className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
-        >
-          {decomposeLoading ? "分解中…" : subTasks.length > 0 ? "重新分解" : "分解子任务"}
-        </button>
-      </div>
+    <div className="page-container pb-20 pt-14">
+      <header className="space-y-4 fade-up">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Product Workspace</p>
+        <h1 className="font-display text-3xl font-semibold text-slate-900 sm:text-4xl">问题拆解与答案生成</h1>
+        <p className="max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
+          输入问题后，系统会自动拆成子任务，分别检索与整理，最终输出结构化答案。你可以在执行前调整子任务。
+        </p>
+      </header>
 
-      {subTasks.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">子任务（可编辑，确认后执行检索）</h2>
-          <ul className="space-y-2">
-            {subTasks.map((t, i) => (
-              <li key={i} className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={t}
-                  onChange={(e) => updateSubTask(i, e.target.value)}
-                  placeholder={`子任务 ${i + 1}`}
-                  className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                  disabled={running}
-                />
+      <div className="mt-8 grid gap-6 lg:grid-cols-[2fr_1fr]">
+        <section className="card p-6 sm:p-8 fade-up">
+          {error && (
+            <div
+              role="alert"
+              className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            >
+              {error}
+            </div>
+          )}
+          <div className="space-y-4">
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Step 1 · 输入问题
+            </label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runDecomposeOnly()}
+                placeholder="输入你的问题..."
+                className="input-field flex-1"
+                disabled={decomposeLoading}
+                aria-label="输入问题"
+              />
+              <button
+                type="button"
+                onClick={runDecomposeOnly}
+                disabled={decomposeLoading}
+                className="btn-primary"
+              >
+                {decomposeLoading ? "分解中…" : subTasks.length > 0 ? "重新分解" : "分解子任务"}
+              </button>
+            </div>
+          </div>
+
+          {subTasks.length > 0 && (
+            <section className="mt-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Step 2 · 子任务编辑
+                  </p>
+                  <h2 className="section-title">确认检索范围</h2>
+                </div>
+                <span className="badge">{subTasks.length} 个子任务</span>
+              </div>
+              <ul className="mt-4 space-y-3">
+                {subTasks.map((t, i) => (
+                  <li key={i} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                      type="text"
+                      value={t}
+                      onChange={(e) => updateSubTask(i, e.target.value)}
+                      placeholder={`子任务 ${i + 1}`}
+                      className="input-field flex-1"
+                      disabled={running}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSubTask(i)}
+                      disabled={running || subTasks.length <= 1}
+                      className="btn-secondary px-3 py-2 text-slate-500 hover:text-red-600"
+                      title="删除"
+                    >
+                      删除
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => removeSubTask(i)}
-                  disabled={running || subTasks.length <= 1}
-                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                  title="删除"
+                  onClick={addSubTask}
+                  disabled={running}
+                  className="btn-secondary"
                 >
-                  ×
+                  添加子任务
                 </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={addSubTask}
-              disabled={running}
-              className="text-sm px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-100 disabled:opacity-50"
-            >
-              + 添加子任务
-            </button>
-            <button
-              type="button"
-              onClick={runFromStep2}
-              disabled={running || !canConfirm}
-              className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
-            >
-              {running ? "运行中…" : hasRunOnce ? "重新执行" : "确认并执行"}
-            </button>
-          </div>
+                <button
+                  type="button"
+                  onClick={runFromStep2}
+                  disabled={running || !canConfirm}
+                  className="btn-primary"
+                >
+                  {running ? "运行中…" : hasRunOnce ? "重新执行" : "确认并执行"}
+                </button>
+              </div>
+            </section>
+          )}
         </section>
-      )}
+
+        <aside className="card-tight p-6 sm:p-7 fade-up">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">实时进度</p>
+          <h3 className="mt-2 font-display text-2xl font-semibold text-slate-900">当前状态</h3>
+          <div className="mt-4 space-y-3 text-sm text-slate-600">
+            <div className="flex items-center justify-between">
+              <span>分解任务</span>
+              <span className="text-slate-800">{decomposeLoading ? "进行中" : "就绪"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>检索执行</span>
+              <span className="text-slate-800">{running ? "执行中" : subTaskStates.length ? "完成" : "等待"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>答案生成</span>
+              <span className="text-slate-800">{streaming ? "输出中" : finalAnswer ? "完成" : "等待"}</span>
+            </div>
+          </div>
+          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
+            提示：可先分解任务，再手动调整，以获得更准确的检索结果。
+          </div>
+        </aside>
+      </div>
 
       {subTaskStates.length > 0 && (
-        <section className="mb-8 space-y-3">
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">检索与整理</h2>
+        <section className="mt-8 space-y-4 fade-up">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Step 3 · 检索与整理
+              </p>
+              <h2 className="section-title">检索结果与摘要</h2>
+            </div>
+            <span className="badge">同步更新</span>
+          </div>
           {subTaskStates.map((st, i) => (
-            <div
-              key={i}
-              className="border border-slate-200 rounded-lg bg-white overflow-hidden"
-            >
+            <div key={i} className="card-tight overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleCollapsed(i)}
-                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-50"
+                aria-expanded={!collapsed[i]}
+                className="flex w-full items-center justify-between px-5 py-4 text-left transition hover:bg-slate-50"
               >
-                <span className="font-medium text-slate-800">{st.name}</span>
-                <span className="text-slate-500 text-sm">
+                <span className="font-medium text-slate-900">{st.name}</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                   {st.status === "pending" && "待处理"}
-                  {st.status === "loading" && "检索中…"}
+                  {st.status === "loading" && "检索中"}
                   {st.status === "done" && (collapsed[i] ? "展开" : "收起")}
                 </span>
               </button>
               {!collapsed[i] && (
-                <div className="px-4 pb-4 border-t border-slate-100">
+                <div className="border-t border-slate-100 px-5 pb-5">
                   {st.status === "loading" && (
-                    <p className="text-slate-500 py-2">正在检索与拉取正文…</p>
+                    <p className="py-2 text-sm text-slate-500">正在检索与拉取正文…</p>
                   )}
                   {st.hits && st.hits.length > 0 && (
-                    <div className="mt-2 space-y-2">
+                    <div className="mt-2 space-y-3">
                       {st.hits.map((h, j) => (
-                        <div key={j} className="text-sm text-slate-600 bg-slate-50 p-2 rounded">
+                        <div key={j} className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
                           {h.url && (
                             <a
                               href={h.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline block mb-1"
+                              className="mb-1 block text-blue-600 underline-offset-4 hover:underline"
                             >
                               {h.url}
                             </a>
@@ -296,9 +354,9 @@ export default function AppPage() {
                     </div>
                   )}
                   {st.summary && (
-                    <div className="mt-3 p-3 bg-slate-50 rounded text-slate-700">
-                      <p className="text-sm font-medium text-slate-600 mb-1">整理结果</p>
-                      <p className="text-sm whitespace-pre-wrap">{st.summary}</p>
+                    <div className="mt-4 rounded-xl bg-slate-50 p-4 text-slate-700">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">整理结果</p>
+                      <p className="mt-2 text-sm whitespace-pre-wrap">{st.summary}</p>
                     </div>
                   )}
                 </div>
@@ -309,18 +367,19 @@ export default function AppPage() {
       )}
 
       {(finalAnswer || streaming) && (
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-semibold text-slate-800">最终答案</h2>
-            <button
-              type="button"
-              onClick={copyAsMarkdown}
-              className="text-sm px-3 py-1 border border-slate-300 rounded hover:bg-slate-100"
-            >
+        <section className="mt-8 fade-up">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Step 4 · 最终答案
+              </p>
+              <h2 className="section-title">可直接复制的结果</h2>
+            </div>
+            <button type="button" onClick={copyAsMarkdown} className="btn-secondary">
               一键复制为 Markdown
             </button>
           </div>
-          <div className="border border-slate-200 rounded-lg bg-white p-4 min-h-[120px] prose prose-slate max-w-none">
+          <div className="card mt-4 min-h-[160px] p-5 markdown">
             <ReactMarkdown>{finalAnswer || (streaming ? "…" : "")}</ReactMarkdown>
           </div>
         </section>

@@ -1,13 +1,151 @@
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Crimson+Pro:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  font-family: system-ui, -apple-system, sans-serif;
+@layer base {
+  :root {
+    --ink: #0f172a;
+    --muted: #475569;
+    --accent: #2563eb;
+    --accent-strong: #1d4ed8;
+    --surface: #ffffff;
+    --surface-soft: #f8fafc;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background-color: var(--surface-soft);
+    background-image:
+      radial-gradient(60rem 60rem at 10% -20%, rgba(37, 99, 235, 0.12), transparent 55%),
+      radial-gradient(50rem 50rem at 90% -10%, rgba(71, 85, 105, 0.18), transparent 60%);
+  }
 }
 
 #root {
   min-height: 100vh;
+}
+
+@layer components {
+  .page-shell {
+    @apply relative min-h-screen overflow-hidden;
+  }
+
+  .nav-shell {
+    @apply sticky top-0 z-20 border-b border-slate-200/80 bg-white/70 backdrop-blur;
+  }
+
+  .nav-link {
+    @apply text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors;
+  }
+
+  .nav-link-active {
+    @apply text-slate-900;
+  }
+
+  .page-container {
+    @apply mx-auto w-full max-w-5xl px-6;
+  }
+
+  .card {
+    @apply rounded-2xl border border-slate-200/70 bg-white/85 shadow-[0_12px_40px_-30px_rgba(15,23,42,0.6)] backdrop-blur;
+  }
+
+  .card-tight {
+    @apply rounded-xl border border-slate-200/70 bg-white/80;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-slate-300 bg-white/90 px-4 py-2 text-sm text-slate-900 shadow-sm transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold text-slate-600;
+  }
+
+  .section-title {
+    @apply text-xl font-semibold text-slate-900;
+  }
+
+  .font-display {
+    font-family: "Crimson Pro", "Times New Roman", serif;
+  }
+
+  .markdown {
+    @apply text-slate-700 leading-relaxed;
+  }
+
+  .markdown h1 {
+    @apply mt-6 text-2xl font-semibold text-slate-900;
+  }
+
+  .markdown h2 {
+    @apply mt-5 text-xl font-semibold text-slate-900;
+  }
+
+  .markdown h3 {
+    @apply mt-4 text-lg font-semibold text-slate-900;
+  }
+
+  .markdown p {
+    @apply mt-3;
+  }
+
+  .markdown a {
+    @apply text-blue-600 underline-offset-4 hover:underline;
+  }
+
+  .markdown ul {
+    @apply mt-3 list-disc pl-5;
+  }
+
+  .markdown ol {
+    @apply mt-3 list-decimal pl-5;
+  }
+
+  .markdown code {
+    @apply rounded bg-slate-100 px-1.5 py-0.5 text-sm text-slate-700;
+  }
+}
+
+@layer utilities {
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .fade-up {
+    animation: fadeUp 600ms ease both;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up {
+    animation: none;
+  }
 }
