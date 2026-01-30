@@ -1,4 +1,6 @@
 .cursor
+.claude
+.opencode
 .venv
 __pycache__
 *.pyc

@@ -23,7 +23,7 @@ def _load_prompt(name: str) -> str:
 
 async def _chat(system: str, user: str) -> str:
     settings = get_settings()
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=settings.OPENAI_TIMEOUT)
     model = settings.LLM_MODEL_ID
     resp = await client.chat.completions.create(
         model=model,
@@ -37,7 +37,7 @@ async def _chat(system: str, user: str) -> str:
 
 async def _chat_stream(system: str, user: str) -> AsyncIterator[str]:
     settings = get_settings()
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=settings.OPENAI_TIMEOUT)
     model = settings.LLM_MODEL_ID
     stream_resp = await client.chat.completions.create(
         model=model,

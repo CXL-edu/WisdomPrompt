@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"
     OPENAI_API_KEY: str = ""
     LLM_MODEL_ID: str = "gpt-4o-mini"
+    OPENAI_TIMEOUT: float = 60.0  # 秒，整次请求超时（非流式=等完整响应；流式=两段数据间最长等待）。非首 token 时间。
 
     # Embedding (Gemini)
     GEMINI_API_KEY: str = ""
