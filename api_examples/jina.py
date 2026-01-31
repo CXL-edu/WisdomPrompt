@@ -15,46 +15,68 @@ os.environ.pop('https_proxy', None)
 
 
 class JinaClient:
-    """Jina API 客户端，用于读取和搜索网页内容"""
+    """Jina API 客户端，用于读取和搜索网页内容。
     
-    def __init__(self, api_key: Optional[str] = None):
+    省 token 建议：
+    - 不传 api_key 时走 r.jina.ai 无 Key 模式：0 token 消耗，限 20 RPM。
+    - 传 token_budget 可限制单次返回长度（需带 Key 时有效）。
+    - with_generated_alt=False 可关闭图片描述，减少输出 token。
+    """
+
+    def __init__(self, api_key: Optional[str] = None, use_api_key: Optional[bool] = None):
         """
         初始化 Jina 客户端
-        
+
         Args:
             api_key: Jina API Key，如果为 None 则从环境变量 JINA_API_KEY 读取
+            use_api_key: 是否在 Reader 请求中带 Key。None=有 key 就带；False=强制不带（0 token，20 RPM）；True=强制带
         """
-        self.api_key = api_key or os.getenv('JINA_API_KEY')
+        self._api_key_raw = api_key or os.getenv('JINA_API_KEY')
+        self.use_api_key = use_api_key  # None = auto (use key if set)
+        self.api_key = self._api_key_raw if (use_api_key is not False and self._api_key_raw) else None
         self.base_url_read = "https://r.jina.ai"
         self.base_url_search = "https://s.jina.ai"
-        
-        # 构建请求头
+
+        # 默认请求头（read_url 可覆盖）
         self.headers = {
             "Accept": "application/json",
             "X-With-Generated-Alt": "true",
         }
-        
         if self.api_key:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
-    
-    def read_url(self, url: str, save_to_file: Optional[str] = None, verbose: bool = True) -> Dict:
+
+    def read_url(
+        self,
+        url: str,
+        save_to_file: Optional[str] = None,
+        verbose: bool = True,
+        *,
+        token_budget: Optional[int] = None,
+        with_generated_alt: bool = True,
+    ) -> Dict:
         """
-        读取单个网页内容
-        
+        读取单个网页内容。
+
         Args:
             url: 要读取的网页 URL
             save_to_file: 可选，保存结果的文件路径
             verbose: 是否打印详细信息
-            
+            token_budget: 可选，单次返回最大 token 数（带 Key 时有效，可省 token）
+            with_generated_alt: 是否生成图片描述，False 可减少输出 token
+
         Returns:
             包含 title, url, content 的字典
         """
         if verbose:
             print(f"读取 URL: {url}")
-        
+        headers = dict(self.headers)
+        if not with_generated_alt:
+            headers.pop("X-With-Generated-Alt", None)
+        if token_budget is not None:
+            headers["X-Token-Budget"] = str(token_budget)
         try:
             reader_url = f"{self.base_url_read}/{url}"
-            response = requests.get(reader_url, headers=self.headers)
+            response = requests.get(reader_url, headers=headers)
             response.raise_for_status()
             
             # 解析响应

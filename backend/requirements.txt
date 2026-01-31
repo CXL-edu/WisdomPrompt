@@ -9,3 +9,5 @@ httpx>=0.26.0
 duckdb>=0.10.0
 exa-py>=1.0.0
 openai>=1.0.0
+readability-lxml>=0.8.0
+html2text>=2024.2.0
