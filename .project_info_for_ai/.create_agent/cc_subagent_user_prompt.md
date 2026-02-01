@@ -1,0 +1,1 @@
+Create an agent configuration based on this request: \"{user_input}\".\n  Return ONLY the JSON object, no other text.

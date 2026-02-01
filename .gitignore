@@ -1,5 +1,6 @@
 .cursor
 .claude
+.codex
 .opencode
 .venv
 __pycache__
