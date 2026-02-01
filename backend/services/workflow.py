@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, AsyncIterator, List, Optional
 
@@ -64,8 +65,21 @@ async def run_workflow(
                     min_similarity=settings.MIN_SIMILARITY_SCORE,
                 )
                 hits: List[dict] = []
+                web_results = await search_service.search_web(st, count=8)
+                logger.info(
+                    "retrieval_web_results", sub_task=st[:60], n=len(web_results)
+                )
+                candidates: List[dict] = []
+                for w in web_results[:5]:
+                    url = (w.get("url") or "").strip()
+                    if not url or url in seen_urls:
+                        continue
+                    seen_urls.add(url)
+                    candidates.append(w)
+
+                total_expected = len(vector_hits) + len(candidates)
                 progress_count = 0
-                total_expected = len(vector_hits)
+
                 for h in vector_hits:
                     url = h.get("url") or ""
                     if url:
@@ -91,43 +105,29 @@ async def run_workflow(
                 logger.info(
                     "retrieval_vector_hits", sub_task=st[:60], n=len(vector_hits)
                 )
-                web_results = await search_service.search_web(st, count=8)
-                logger.info(
-                    "retrieval_web_results", sub_task=st[:60], n=len(web_results)
-                )
-                total_expected = len(vector_hits) + min(5, len(web_results))
+
                 n_fetched = 0
-                for w in web_results[:5]:
+
+                async def fetch_one(w: dict) -> Optional[dict]:
                     url = (w.get("url") or "").strip()
-                    if not url or url in seen_urls:
-                        continue
+                    if not url:
+                        return None
                     try:
                         fetched = await content_fetch.fetch_content(url)
                         content = fetched.get("content", "")
                         if content:
                             emb = await embedding.embed_text(content[:8000])
                             await store.add(
-                                content[:12000], url, fetched.get("source", "web"), emb
+                                content[:12000],
+                                url,
+                                fetched.get("source", "web"),
+                                emb,
                             )
-                            hit = {
+                            return {
                                 "content": content[:4000],
                                 "url": url,
                                 "source": fetched.get("source"),
                                 "similarity": 0.0,
-                            }
-                            hits.append(hit)
-                            seen_urls.add(url)
-                            n_fetched += 1
-                            progress_count += 1
-                            yield {
-                                "event": "step2_retrieval_progress",
-                                "data": {
-                                    "index": i,
-                                    "sub_task": st,
-                                    "hit": hit,
-                                    "progress": progress_count,
-                                    "total": total_expected,
-                                },
                             }
                     except Exception as e:
                         logger.warning(
@@ -137,25 +137,38 @@ async def run_workflow(
                             (w.get("title") or "") + "\n" + (w.get("description") or "")
                         )
                         if snippet.strip():
-                            hit = {
+                            return {
                                 "content": snippet[:2000],
                                 "url": url,
                                 "source": "search_snippet",
                                 "similarity": 0.0,
                             }
-                            hits.append(hit)
-                            seen_urls.add(url)
-                            progress_count += 1
-                            yield {
-                                "event": "step2_retrieval_progress",
-                                "data": {
-                                    "index": i,
-                                    "sub_task": st,
-                                    "hit": hit,
-                                    "progress": progress_count,
-                                    "total": total_expected,
-                                },
-                            }
+                    return None
+
+                sem = asyncio.Semaphore(2)
+
+                async def guarded_fetch(w: dict) -> Optional[dict]:
+                    async with sem:
+                        return await fetch_one(w)
+
+                tasks = [asyncio.create_task(guarded_fetch(w)) for w in candidates]
+                for fut in asyncio.as_completed(tasks):
+                    hit = await fut
+                    progress_count += 1
+                    if hit:
+                        hits.append(hit)
+                        if hit.get("source") != "search_snippet":
+                            n_fetched += 1
+                    yield {
+                        "event": "step2_retrieval_progress",
+                        "data": {
+                            "index": i,
+                            "sub_task": st,
+                            "hit": hit,
+                            "progress": progress_count,
+                            "total": total_expected,
+                        },
+                    }
                 logger.info(
                     "retrieval_merged",
                     sub_task=st[:60],

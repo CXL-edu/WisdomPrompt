@@ -1,4 +1,5 @@
 """Content fetch: webfetch first with retry, then Readability (Mozilla), then Jina Reader fallback with daily limit."""
+
 from __future__ import annotations
 
 import asyncio
@@ -15,18 +16,24 @@ from backend.core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 # Readability + html2text (optional: used when webfetch succeeds but we want article-only, or as fallback before Jina)
 def _readability_available() -> bool:
     try:
         from readability import Document  # noqa: F401
         import html2text  # noqa: F401
+
         return True
     except ImportError:
         return False
 
+
 # Simple HTML text extraction (no bs4 dependency)
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-_SCRIPT_STYLE = re.compile(r"<(?:script|style|noscript)[^>]*>.*?</(?:script|style|noscript)>", re.DOTALL | re.IGNORECASE)
+_SCRIPT_STYLE = re.compile(
+    r"<(?:script|style|noscript)[^>]*>.*?</(?:script|style|noscript)>",
+    re.DOTALL | re.IGNORECASE,
+)
 _TAGS = re.compile(r"<[^>]+>")
 _WHITESPACE = re.compile(r"\s+")
 _MAX_BODY = 500_000  # ~500k chars
@@ -36,7 +43,7 @@ def _html_to_text(html: str) -> str:
     s = _SCRIPT_STYLE.sub(" ", html)
     s = _TAGS.sub(" ", s)
     s = _WHITESPACE.sub(" ", s).strip()
-    return s[: _MAX_BODY] if len(s) > _MAX_BODY else s
+    return s[:_MAX_BODY] if len(s) > _MAX_BODY else s
 
 
 def _jina_usage_path() -> Path:
@@ -76,11 +83,18 @@ def _estimate_tokens(text: str) -> int:
 
 # 拉取超时：过大会在 403/5xx 时卡很久
 _WEBFETCH_TIMEOUT = 15.0
+_WEBFETCH_TIMEOUT_FAST = 6.0
 _JINA_TIMEOUT = 20.0
+_JINA_TIMEOUT_FAST = 8.0
+_FAST_FAIL_DOMAINS = ("zhuanlan.zhihu.com", "zhihu.com")
 
 # Readability 结果过短或含常见错误文案时，回退到旧 webfetch
 _READABILITY_MIN_LEN = 150
-_READABILITY_BAD_PHRASES = ("can't perform that action", "you can't perform", "this page could not be found")
+_READABILITY_BAD_PHRASES = (
+    "can't perform that action",
+    "you can't perform",
+    "this page could not be found",
+)
 
 
 def _is_github_blob_url(url: str) -> bool:
@@ -91,6 +105,7 @@ def _github_blob_to_raw_url(url: str) -> Optional[str]:
     """github.com/owner/repo/blob/branch/path -> raw.githubusercontent.com/owner/repo/branch/path"""
     try:
         from urllib.parse import urlparse
+
         p = urlparse(url)
         if p.netloc not in ("github.com", "www.github.com"):
             return None
@@ -118,7 +133,7 @@ async def _github_raw_fetch(url: str) -> tuple[Optional[str], Optional[str]]:
             resp = await client.get(raw_url)
             resp.raise_for_status()
             text = resp.text
-            return (text[: _MAX_BODY] if len(text) > _MAX_BODY else text), None
+            return (text[:_MAX_BODY] if len(text) > _MAX_BODY else text), None
     except Exception as e:
         return None, str(e)
 
@@ -134,12 +149,14 @@ def _readability_result_ok(content: str) -> bool:
     return True
 
 
-async def _webfetch_once(url: str) -> tuple[Optional[str], Optional[str]]:
+async def _webfetch_once(
+    url: str, timeout: float = _WEBFETCH_TIMEOUT
+) -> tuple[Optional[str], Optional[str]]:
     """Fetch URL and return (content_text, error_message)."""
     try:
         async with httpx.AsyncClient(
             follow_redirects=True,
-            timeout=_WEBFETCH_TIMEOUT,
+            timeout=timeout,
             headers={"User-Agent": _USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
         ) as client:
             resp = await client.get(url)
@@ -152,12 +169,14 @@ async def _webfetch_once(url: str) -> tuple[Optional[str], Optional[str]]:
         return None, str(e)
 
 
-async def _webfetch_raw(url: str) -> tuple[Optional[str], Optional[str]]:
+async def _webfetch_raw(
+    url: str, timeout: float = _WEBFETCH_TIMEOUT
+) -> tuple[Optional[str], Optional[str]]:
     """Fetch URL and return (raw_html, error_message). Only returns HTML for text/html; else (None, err)."""
     try:
         async with httpx.AsyncClient(
             follow_redirects=True,
-            timeout=_WEBFETCH_TIMEOUT,
+            timeout=timeout,
             headers={"User-Agent": _USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
         ) as client:
             resp = await client.get(url)
@@ -178,7 +197,9 @@ def _readability_to_markdown(html: str) -> Optional[str]:
     except ImportError:
         return None
     try:
-        doc = Document(html if isinstance(html, str) else html.decode("utf-8", errors="replace"))
+        doc = Document(
+            html if isinstance(html, str) else html.decode("utf-8", errors="replace")
+        )
         summary_html = doc.summary()
         if not summary_html or not summary_html.strip():
             return None
@@ -192,7 +213,9 @@ def _readability_to_markdown(html: str) -> Optional[str]:
         return None
 
 
-async def _jina_read(url: str) -> tuple[Optional[str], Optional[str]]:
+async def _jina_read(
+    url: str, timeout: float = _JINA_TIMEOUT
+) -> tuple[Optional[str], Optional[str]]:
     """Jina Reader GET; returns (content, error).
     不使用 API Key，走无 Key 模式：0 token 消耗，限 20 RPM。
     """
@@ -203,10 +226,14 @@ async def _jina_read(url: str) -> tuple[Optional[str], Optional[str]]:
         "X-Token-Budget": "16000",  # 限制单次返回长度，避免超长页
     }
     try:
-        async with httpx.AsyncClient(timeout=_JINA_TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             resp = await client.get(reader_url, headers=headers)
             resp.raise_for_status()
-        data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        data = (
+            resp.json()
+            if resp.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
         content = data.get("content", "") if isinstance(data, dict) else resp.text
         return (content or resp.text), None
     except Exception as e:
@@ -220,6 +247,10 @@ async def fetch_content(url: str) -> dict:
     """
     settings = get_settings()
 
+    is_fast_fail = any(domain in url for domain in _FAST_FAIL_DOMAINS)
+    webfetch_timeout = _WEBFETCH_TIMEOUT_FAST if is_fast_fail else _WEBFETCH_TIMEOUT
+    jina_timeout = _JINA_TIMEOUT_FAST if is_fast_fail else _JINA_TIMEOUT
+
     # GitHub blob 链接直接拉 raw 文件，避免 Readability 抽到错误区域
     if _is_github_blob_url(url):
         content, err = await _github_raw_fetch(url)
@@ -228,7 +259,7 @@ async def fetch_content(url: str) -> dict:
 
     # 一次 raw 拉取：优先 Readability，结果不可信时回退到旧 webfetch
     if _readability_available():
-        raw_html, _ = await _webfetch_raw(url)
+        raw_html, _ = await _webfetch_raw(url, timeout=webfetch_timeout)
         if raw_html:
             content = _readability_to_markdown(raw_html)
             if content and _readability_result_ok(content):
@@ -237,22 +268,25 @@ async def fetch_content(url: str) -> dict:
             if content:
                 return {"content": content, "url": url, "source": "webfetch"}
 
-    content, err = await _webfetch_once(url)
+    content, err = await _webfetch_once(url, timeout=webfetch_timeout)
     if content is not None:
         return {"content": content, "url": url, "source": "webfetch"}
     logger.info("webfetch_failed_first", url=url, error=err)
-    await asyncio.sleep(2)
-    content, err = await _webfetch_once(url)
-    if content is not None:
-        return {"content": content, "url": url, "source": "webfetch"}
-    logger.info("webfetch_failed_retry", url=url, error=err)
+    if not is_fast_fail:
+        await asyncio.sleep(2)
+        content, err = await _webfetch_once(url, timeout=webfetch_timeout)
+        if content is not None:
+            return {"content": content, "url": url, "source": "webfetch"}
+        logger.info("webfetch_failed_retry", url=url, error=err)
 
+    if is_fast_fail:
+        raise RuntimeError(f"Content fetch failed (fast-fail): {err}")
     if not settings.JINA_READER_ENABLED:
         raise RuntimeError(f"Content fetch failed (webfetch): {err}")
     day, count, tokens = _read_jina_usage()
     if count >= settings.JINA_DAILY_LIMIT_COUNT:
         raise RuntimeError("Jina daily request limit reached")
-    content, jina_err = await _jina_read(url)
+    content, jina_err = await _jina_read(url, timeout=jina_timeout)
     if content is None:
         raise RuntimeError(f"Jina fetch failed: {jina_err}")
     new_tokens = tokens + _estimate_tokens(content)
