@@ -199,7 +199,7 @@ export default function AppPage() {
                 }
               } else if (currentEvent === "step2_retrieval_progress") {
                 const i = data.index as number;
-                const hit = data.hit as { content?: string; url?: string; source?: string };
+                const hit = data.hit as { content?: string; url?: string; source?: string } | undefined;
                 const progress = (data.progress as number) || 0;
                 const total = (data.total as number) || 0;
                 setSubTaskStates((s) =>
@@ -208,11 +208,16 @@ export default function AppPage() {
                       ? {
                           ...t,
                           status: "loading" as const,
-                          hits: [...(t.hits || []), {
-                            content: hit?.content || "",
-                            url: hit?.url,
-                            source: hit?.source,
-                          }],
+                          hits: hit
+                            ? [
+                                ...(t.hits || []),
+                                {
+                                  content: hit.content || "",
+                                  url: hit.url,
+                                  source: hit.source,
+                                },
+                              ]
+                            : t.hits,
                           progress,
                           total,
                         }
