@@ -1,4 +1,5 @@
 """Product page workflow: decompose -> retrieve -> summarize -> final answer. Yields SSE-style events."""
+
 from __future__ import annotations
 
 import json
@@ -22,7 +23,8 @@ async def run_workflow(
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Run the four-step workflow; yields events for SSE.
-    Events: step1_sub_tasks, step2_retrieval_start, step2_retrieval_done, step3_summary_done, step4_chunk, step4_done, error.
+    Events: step1_sub_tasks, step2_retrieval_start, step2_retrieval_progress, step2_retrieval_done,
+    step3_summary_done, step4_chunk, step4_done, error.
     """
     settings = get_settings()
     cache = cached or {}
@@ -33,14 +35,17 @@ async def run_workflow(
     try:
         # Step 1: Decompose
         if from_step <= 1:
-            sub_tasks = cache.get("sub_tasks")
+            sub_tasks = cache.get("sub_tasks") or []
             if not sub_tasks:
                 sub_tasks = await agent.decompose_query(query)
             yield {"event": "step1_sub_tasks", "data": {"sub_tasks": sub_tasks}}
         else:
             sub_tasks = cache.get("sub_tasks") or []
             if not sub_tasks:
-                yield {"event": "error", "data": {"message": "cached sub_tasks required when from_step > 1"}}
+                yield {
+                    "event": "error",
+                    "data": {"message": "cached sub_tasks required when from_step > 1"},
+                }
                 return
 
         # Step 2: Retrieve (vector + web search + content fetch). Always run web search and merge so we have fresh, relevant content.
@@ -48,18 +53,49 @@ async def run_workflow(
             store = vector_store.get_vector_store()
             seen_urls: set[str] = set()
             for i, st in enumerate(sub_tasks):
-                yield {"event": "step2_retrieval_start", "data": {"index": i, "sub_task": st}}
+                yield {
+                    "event": "step2_retrieval_start",
+                    "data": {"index": i, "sub_task": st},
+                }
                 st_embed = await embedding.embed_text(st)
-                vector_hits = await store.search(st_embed, top_k=settings.TOP_K, min_similarity=settings.MIN_SIMILARITY_SCORE)
+                vector_hits = await store.search(
+                    st_embed,
+                    top_k=settings.TOP_K,
+                    min_similarity=settings.MIN_SIMILARITY_SCORE,
+                )
                 hits: List[dict] = []
+                progress_count = 0
+                total_expected = len(vector_hits)
                 for h in vector_hits:
                     url = h.get("url") or ""
                     if url:
                         seen_urls.add(url)
-                    hits.append({"content": h.get("content", ""), "url": url, "source": h.get("source"), "similarity": h.get("similarity")})
-                logger.info("retrieval_vector_hits", sub_task=st[:60], n=len(vector_hits))
+                    hit = {
+                        "content": h.get("content", ""),
+                        "url": url,
+                        "source": h.get("source"),
+                        "similarity": h.get("similarity"),
+                    }
+                    hits.append(hit)
+                    progress_count += 1
+                    yield {
+                        "event": "step2_retrieval_progress",
+                        "data": {
+                            "index": i,
+                            "sub_task": st,
+                            "hit": hit,
+                            "progress": progress_count,
+                            "total": total_expected,
+                        },
+                    }
+                logger.info(
+                    "retrieval_vector_hits", sub_task=st[:60], n=len(vector_hits)
+                )
                 web_results = await search_service.search_web(st, count=8)
-                logger.info("retrieval_web_results", sub_task=st[:60], n=len(web_results))
+                logger.info(
+                    "retrieval_web_results", sub_task=st[:60], n=len(web_results)
+                )
+                total_expected = len(vector_hits) + min(5, len(web_results))
                 n_fetched = 0
                 for w in web_results[:5]:
                     url = (w.get("url") or "").strip()
@@ -70,19 +106,68 @@ async def run_workflow(
                         content = fetched.get("content", "")
                         if content:
                             emb = await embedding.embed_text(content[:8000])
-                            await store.add(content[:12000], url, fetched.get("source", "web"), emb)
-                            hits.append({"content": content[:4000], "url": url, "source": fetched.get("source"), "similarity": 0.0})
+                            await store.add(
+                                content[:12000], url, fetched.get("source", "web"), emb
+                            )
+                            hit = {
+                                "content": content[:4000],
+                                "url": url,
+                                "source": fetched.get("source"),
+                                "similarity": 0.0,
+                            }
+                            hits.append(hit)
                             seen_urls.add(url)
                             n_fetched += 1
+                            progress_count += 1
+                            yield {
+                                "event": "step2_retrieval_progress",
+                                "data": {
+                                    "index": i,
+                                    "sub_task": st,
+                                    "hit": hit,
+                                    "progress": progress_count,
+                                    "total": total_expected,
+                                },
+                            }
                     except Exception as e:
-                        logger.warning("content_fetch_failed", url=url[:80], error=str(e))
-                        snippet = (w.get("title") or "") + "\n" + (w.get("description") or "")
+                        logger.warning(
+                            "content_fetch_failed", url=url[:80], error=str(e)
+                        )
+                        snippet = (
+                            (w.get("title") or "") + "\n" + (w.get("description") or "")
+                        )
                         if snippet.strip():
-                            hits.append({"content": snippet[:2000], "url": url, "source": "search_snippet", "similarity": 0.0})
+                            hit = {
+                                "content": snippet[:2000],
+                                "url": url,
+                                "source": "search_snippet",
+                                "similarity": 0.0,
+                            }
+                            hits.append(hit)
                             seen_urls.add(url)
-                logger.info("retrieval_merged", sub_task=st[:60], n_vector=len(vector_hits), n_web_fetched=n_fetched, n_total=len(hits))
+                            progress_count += 1
+                            yield {
+                                "event": "step2_retrieval_progress",
+                                "data": {
+                                    "index": i,
+                                    "sub_task": st,
+                                    "hit": hit,
+                                    "progress": progress_count,
+                                    "total": total_expected,
+                                },
+                            }
+                logger.info(
+                    "retrieval_merged",
+                    sub_task=st[:60],
+                    n_vector=len(vector_hits),
+                    n_web_fetched=n_fetched,
+                    n_total=len(hits),
+                )
                 retrieval_results.append({"sub_task": st, "hits": hits})
-                yield {"event": "step2_retrieval_done", "data": {"index": i, "sub_task": st, "hits": hits}}
+                yield {
+                    "event": "step2_retrieval_done",
+                    "data": {"index": i, "sub_task": st, "hits": hits},
+                }
         else:
             retrieval_results = list(cache.get("retrieval") or [])
 
@@ -91,12 +176,20 @@ async def run_workflow(
             for i, res in enumerate(retrieval_results):
                 st = res.get("sub_task", "")
                 hits = res.get("hits", [])
-                combined = "\n\n".join(h.get("content", "") for h in hits if h.get("content"))
+                combined = "\n\n".join(
+                    h.get("content", "") for h in hits if h.get("content")
+                )
                 summary = await agent.summarize_sub_task(st, combined or "No content.")
                 summaries.append((st, summary))
-                yield {"event": "step3_summary_done", "data": {"index": i, "sub_task": st, "summary": summary}}
+                yield {
+                    "event": "step3_summary_done",
+                    "data": {"index": i, "sub_task": st, "summary": summary},
+                }
         else:
-            summaries = [(r.get("sub_task", ""), r.get("summary", "")) for r in (cache.get("summaries") or [])]
+            summaries = [
+                (r.get("sub_task", ""), r.get("summary", ""))
+                for r in (cache.get("summaries") or [])
+            ]
             if not summaries and cache.get("summaries"):
                 for s in cache["summaries"]:
                     if isinstance(s, (list, tuple)) and len(s) >= 2:
