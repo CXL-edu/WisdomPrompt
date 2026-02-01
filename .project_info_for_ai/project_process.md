@@ -9,11 +9,17 @@
 
 ## 任务图入口
 - 权威任务图：`.project_info_for_ai/task_graph.json`（若与本文件快照冲突，以 JSON 为准）。
+- 归档文件：`.project_info_for_ai/task_graph_archive.json`（存放已完成且不再被 pending 依赖的任务）。
 - 阅读顺序：先看本节，再打开 JSON。
 - 快照：
   - Create subagent prompt tooling — completed — 依赖：无 — 触发：无
   - Refine subagent generation workflow — completed — 依赖：无 — 触发：无
   - Switch subagent format to Markdown — completed — 依赖：无 — 触发：无
+  - Create algorithm expert agent — completed — 依赖：无 — 触发：无
+  - Create battery data analysis agent — completed — 依赖：无 — 触发：无
+  - Create data analysis agent — completed — 依赖：无 — 触发：无
+  - Create finance data analysis agent — completed — 依赖：无 — 触发：无
+  - Create mechanical fault diagnosis agent — completed — 依赖：无 — 触发：无
 
 ## 待办事项模板
 使用下列核心模板（可扩展行数/段落）：
@@ -30,3 +36,4 @@
 - 完成任务后：必须更新 `.project_info_for_ai/task_graph.json`；如有重要状态变化，可在本文件快照同步简述。
 - 新任务规划：在 JSON 中添加；必要时在本文件“快照”列出关键任务，保持可读性。
 - 依赖一律视为完成后才能开始；无依赖即默认可并行。
+- 归档完成任务：使用 `.project_info_for_ai/tools/task_graph_tool.py archive` 将不再被 pending 依赖的 completed 任务移入归档。

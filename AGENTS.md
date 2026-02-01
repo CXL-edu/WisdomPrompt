@@ -28,8 +28,10 @@
   - `changelog.md`：开发日志，摘要+目录。
   - `integration/`：仅用于契约推演草案；定稿后移入 `integration/archive/` 并在 API 文档改为指向 archive。
   - `task_graph.json`：唯一权威任务图（结构化依赖）。
+  - `task_graph_archive.json`：已完成且不再被 pending 依赖的任务归档。
   - `api-collaboration.md`：API 设计/联调细则（路径 `.project_info_for_ai/api-collaboration.md`）。
   - `.create_agent/`：子 Agent 生成工具入口（脚本）；读取 `backend/prompts/cc_subagent_sys_prompt.md`（系统提示词）与 `backend/prompts/cc_subagent_user_prompt.md`（用户提示词模板，需传入 user_input），输出提示词或生成 Markdown 到 `.project_info_for_ai/agents/`，并可同步到各工具的 agents 目录。
+  - `.project_info_for_ai/tools/task_graph_tool.py`：任务图校验/归档脚本。
 
 ## 任务与任务图规范
 - 权威源：`.project_info_for_ai/task_graph.json`。

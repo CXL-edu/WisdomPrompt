@@ -1,0 +1,142 @@
+{
+  "project_name": "wisdomprompt1",
+  "tasks": [
+    {
+      "id": "task_create_subagent_tooling",
+      "name": "Create subagent prompt tooling",
+      "description": "Add .project_info_for_ai/.create_agent tooling to assemble prompts from backend/prompts templates and generate subagent JSON, and document the workflow in AGENTS.md and project_process.md.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/.create_agent/create_agent.sh",
+        ".project_info_for_ai/agents/"
+      ],
+      "definition_of_done": "Script can build full prompt and generate JSON into .project_info_for_ai/agents; documentation updated."
+    },
+    {
+      "id": "task_refine_subagent_workflow",
+      "name": "Refine subagent generation workflow",
+      "description": "Auto-select prompt-only vs JSON generation based on env keys/URL, document clean-chat requirement, and add sync tool for agent definitions.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/.create_agent/create_agent.sh",
+        ".project_info_for_ai/.create_agent/sync_agents.sh",
+        "AGENTS.md"
+      ],
+      "definition_of_done": "create_agent auto-selects mode, sync script exists, and docs reflect new workflow."
+    },
+    {
+      "id": "task_switch_subagent_markdown",
+      "name": "Switch subagent format to Markdown",
+      "description": "Align subagent generation with .cursor/agents markdown format, update prompt templates and tooling to emit .md files, and update docs accordingly.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        "backend/prompts/cc_subagent_sys_prompt.md",
+        "backend/prompts/cc_subagent_user_prompt.md",
+        ".project_info_for_ai/.create_agent/create_agent.sh",
+        ".project_info_for_ai/.create_agent/sync_agents.sh",
+        "AGENTS.md"
+      ],
+      "definition_of_done": "Prompt templates produce markdown, tooling writes .md, and docs reflect markdown workflow."
+    },
+    {
+      "id": "task_create_algorithm_agent",
+      "name": "Create algorithm expert agent",
+      "description": "Generate a Markdown subagent definition for algorithm expertise and sync it to tool agent directories.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/agents/algorithm-expert.md",
+        ".project_info_for_ai/.create_agent/sync_agents.sh",
+        ".cursor/agents/"
+      ],
+      "definition_of_done": "Algorithm expert agent exists in .project_info_for_ai/agents and is synced to tool agent dirs."
+    },
+    {
+      "id": "task_create_battery_data_agent",
+      "name": "Create battery data analysis agent",
+      "description": "Generate a Markdown subagent definition for battery data analysis expertise and sync it to tool agent directories.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/agents/battery-data-analyst.md",
+        ".project_info_for_ai/.create_agent/sync_agents.sh",
+        ".cursor/agents/"
+      ],
+      "definition_of_done": "Battery data analysis agent exists in .project_info_for_ai/agents and is synced to tool agent dirs."
+    },
+    {
+      "id": "task_create_data_analyst_agent",
+      "name": "Create data analysis agent",
+      "description": "Generate a Markdown subagent definition for general data analysis and sync it to tool agent directories.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/agents/data-analyst.md",
+        ".project_info_for_ai/.create_agent/sync_agents.sh",
+        ".cursor/agents/"
+      ],
+      "definition_of_done": "Data analysis agent exists in .project_info_for_ai/agents and is synced to tool agent dirs."
+    },
+    {
+      "id": "task_create_finance_data_agent",
+      "name": "Create finance data analysis agent",
+      "description": "Generate a Markdown subagent definition for finance data analysis and sync it to tool agent directories.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/agents/finance-data-analyst.md",
+        ".project_info_for_ai/.create_agent/sync_agents.sh",
+        ".cursor/agents/"
+      ],
+      "definition_of_done": "Finance data analysis agent exists in .project_info_for_ai/agents and is synced to tool agent dirs."
+    },
+    {
+      "id": "task_create_mechanical_fault_agent",
+      "name": "Create mechanical fault diagnosis agent",
+      "description": "Generate a Markdown subagent definition for mechanical fault diagnosis and sync it to tool agent directories.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/agents/mechanical-fault-diagnosis.md",
+        ".project_info_for_ai/.create_agent/sync_agents.sh",
+        ".cursor/agents/"
+      ],
+      "definition_of_done": "Mechanical fault diagnosis agent exists in .project_info_for_ai/agents and is synced to tool agent dirs."
+    },
+    {
+      "id": "task_add_task_graph_archive_tooling",
+      "name": "Add task graph archive tooling",
+      "description": "Create a task_graph_archive.json file and a script to validate and archive completed tasks, then document usage.",
+      "status": "completed",
+      "assigned_agent": "main",
+      "dependencies": [],
+      "downstream": [],
+      "hints": [
+        ".project_info_for_ai/task_graph_archive.json",
+        ".project_info_for_ai/tools/task_graph_tool.py",
+        ".project_info_for_ai/project_process.md",
+        "AGENTS.md"
+      ],
+      "definition_of_done": "Archive file exists, task graph tool script supports validate/archive/stats/list, and docs mention the archive."
+    }
+  ]
+}
