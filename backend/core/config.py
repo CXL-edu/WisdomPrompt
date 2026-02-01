@@ -1,4 +1,5 @@
 """Application settings loaded from .env and optional config files."""
+
 from functools import lru_cache
 from typing import Literal
 
@@ -47,6 +48,8 @@ class Settings(BaseSettings):
     JINA_READER_ENABLED: bool = True
     JINA_DAILY_LIMIT_COUNT: int = 10
     JINA_DAILY_LIMIT_TOKENS: int = 10_000
+    JINA_API_KEY: str = ""
+    JINA_USE_API_KEY: bool = False
 
     # Optional: SQLite for future use (plan mentions DuckDB for vectors)
     DATABASE_URL: str = "sqlite:///./wisdomprompt.db"
