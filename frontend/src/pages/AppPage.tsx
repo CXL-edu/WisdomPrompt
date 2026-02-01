@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -31,7 +31,10 @@ export default function AppPage() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
+  const [sourceOpen, setSourceOpen] = useState<Record<string, boolean>>({});
+  const [showJump, setShowJump] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const answerRef = useRef<HTMLDivElement | null>(null);
   const hasDecomposed = decomposeLoading || subTasks.length > 0;
   const hasRun = running || subTaskStates.length > 0 || streaming || finalAnswer.length > 0;
   const retrievalActive = subTaskStates.some((s) => s.status === "loading");
@@ -53,6 +56,10 @@ export default function AppPage() {
     },
     [subTaskStates]
   );
+
+  const toggleSources = useCallback((id: string) => {
+    setSourceOpen((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
 
   const updateSubTask = useCallback((index: number, value: string) => {
     setSubTasks((prev) => {
@@ -83,6 +90,8 @@ export default function AppPage() {
     setSubTaskStates([]);
     setFinalAnswer("");
     setCollapsed({});
+    setSourceOpen({});
+    setShowJump(false);
     setDecomposeLoading(true);
     setSubTasks([]);
     try {
@@ -119,6 +128,8 @@ export default function AppPage() {
     setRunning(true);
     setSubTaskStates(activeTasks.map((task) => ({ id: task.id, name: task.value, status: "pending" as const })));
     setCollapsed(Object.fromEntries(activeTasks.map((_, i) => [i, true])));
+    setSourceOpen({});
+    setShowJump(false);
     setFinalAnswer("");
     setStreaming(false);
 
@@ -269,6 +280,19 @@ export default function AppPage() {
       text: streaming ? "输出中" : finalAnswer ? "完成" : "等待",
     },
   ];
+
+  const handleAnswerScroll = useCallback(() => {
+    if (!answerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = answerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 32;
+    setShowJump(!isNearBottom);
+  }, []);
+
+  useEffect(() => {
+    if (!streaming || showJump) return;
+    if (!answerRef.current) return;
+    answerRef.current.scrollTo({ top: answerRef.current.scrollHeight, behavior: "smooth" });
+  }, [streaming, showJump]);
 
   return (
     <div className="page-container pb-20 pt-14">
@@ -523,25 +547,38 @@ export default function AppPage() {
                       </div>
                     )}
                     {st.hits && st.hits.length > 0 && (
-                      <div className="mt-4 space-y-3">
-                        {st.hits.map((h) => (
-                          <div
-                            key={`${h.url || h.source || "hit"}-${h.content.slice(0, 24)}`}
-                            className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600"
-                          >
-                            {h.url && (
-                              <a
-                                href={h.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mb-1 block text-blue-600 underline-offset-4 hover:underline"
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() => toggleSources(st.id)}
+                          className="btn-secondary px-3 py-1 text-xs"
+                          aria-expanded={Boolean(sourceOpen[st.id])}
+                          aria-controls={`subtask-sources-${st.id}`}
+                        >
+                          {sourceOpen[st.id] ? "收起来源" : `查看 ${st.hits.length} 条来源`}
+                        </button>
+                        {sourceOpen[st.id] && (
+                          <div id={`subtask-sources-${st.id}`} className="mt-3 space-y-3">
+                            {st.hits.map((h) => (
+                              <div
+                                key={`${h.url || h.source || "hit"}-${h.content.slice(0, 24)}`}
+                                className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600"
                               >
-                                {h.url}
-                              </a>
-                            )}
-                            <p className="line-clamp-3">{h.content}</p>
+                                {h.url && (
+                                  <a
+                                    href={h.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mb-1 block text-blue-600 underline-offset-4 hover:underline"
+                                  >
+                                    {h.url}
+                                  </a>
+                                )}
+                                <p className="line-clamp-3">{h.content}</p>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
@@ -568,6 +605,20 @@ export default function AppPage() {
                   输出中
                 </span>
               )}
+              {showJump && (
+                <button
+                  type="button"
+                  className="btn-secondary px-3 py-1 text-xs"
+                  onClick={() =>
+                    answerRef.current?.scrollTo({
+                      top: answerRef.current.scrollHeight,
+                      behavior: "smooth",
+                    })
+                  }
+                >
+                  跳到最新
+                </button>
+              )}
               <button type="button" onClick={copyAsMarkdown} disabled={!canCopy} className="btn-secondary">
                 {canCopy ? "一键复制为 Markdown" : "生成中…"}
               </button>
@@ -577,6 +628,8 @@ export default function AppPage() {
             className="card mt-4 min-h-[160px] p-5 markdown"
             aria-live="polite"
             aria-busy={streaming}
+            ref={answerRef}
+            onScroll={handleAnswerScroll}
           >
             {!finalAnswer && streaming && (
               <div className="space-y-3">
