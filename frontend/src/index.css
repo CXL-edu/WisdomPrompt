@@ -79,6 +79,73 @@
     @apply text-xl font-semibold text-slate-900;
   }
 
+  .progress-row {
+    @apply flex items-center justify-between gap-4;
+  }
+
+  .progress-state {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500;
+  }
+
+  .status-dot {
+    @apply inline-flex h-2.5 w-2.5 items-center justify-center rounded-full border border-slate-300 bg-white;
+  }
+
+  .status-dot--active {
+    border-color: rgba(148, 163, 184, 0.9);
+    border-top-color: var(--accent);
+    background: transparent;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .status-dot--idle {
+    border-color: rgba(203, 213, 225, 0.9);
+    background: #fff;
+  }
+
+  .status-dot--done {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .status-dot--error {
+    background: #ef4444;
+    border-color: #ef4444;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+    animation: pulseDot 1.4s ease-out infinite;
+  }
+
+  .collapse-panel {
+    overflow: hidden;
+    transition: max-height 200ms ease, opacity 200ms ease;
+  }
+
+  .collapse-panel--open {
+    max-height: 1400px;
+    opacity: 1;
+  }
+
+  .collapse-panel--closed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .skeleton {
+    @apply rounded-xl bg-slate-100;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+
   .font-display {
     font-family: "Crimson Pro", "Times New Roman", serif;
   }
@@ -144,8 +211,42 @@
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulseDot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(37, 99, 235, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fade-up {
+    animation: none;
+  }
+
+  .status-dot--active,
+  .pulse-dot,
+  .skeleton {
     animation: none;
   }
 }
