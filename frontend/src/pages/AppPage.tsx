@@ -19,6 +19,8 @@ type SubTaskState = {
   hits?: { content: string; url?: string; source?: string }[];
   summary?: string;
   error?: string;
+  progress?: number;
+  total?: number;
 };
 
 export default function AppPage() {
@@ -43,6 +45,14 @@ export default function AppPage() {
   const summaryDone =
     subTaskStates.length > 0 && subTaskStates.every((s) => Boolean(s.summary) || s.status === "error");
   const hasTaskError = subTaskStates.some((s) => s.status === "error");
+  const retrievalProgressTotal = subTaskStates.reduce(
+    (total, item) => total + (item.total || 0),
+    0
+  );
+  const retrievalProgressCurrent = subTaskStates.reduce(
+    (current, item) => current + (item.progress || 0),
+    0
+  );
 
   const toggleCollapsed = useCallback((i: number) => {
     setCollapsed((c) => ({ ...c, [i]: !c[i] }));
@@ -170,7 +180,11 @@ export default function AppPage() {
               if (currentEvent === "step2_retrieval_start") {
                 const i = data.index as number;
                 setSubTaskStates((s) =>
-                  s.map((t, j) => (j === i ? { ...t, status: "loading" as const } : t))
+                  s.map((t, j) =>
+                    j === i
+                      ? { ...t, status: "loading" as const, hits: [], progress: 0, total: 0 }
+                      : t
+                  )
                 );
                 setCollapsed(() => {
                   const next: Record<number, boolean> = {};
@@ -179,6 +193,32 @@ export default function AppPage() {
                   }
                   return next;
                 });
+                const target = activeTasks[i]?.id;
+                if (target) {
+                  setSourceOpen((prev) => ({ ...prev, [target]: true }));
+                }
+              } else if (currentEvent === "step2_retrieval_progress") {
+                const i = data.index as number;
+                const hit = data.hit as { content?: string; url?: string; source?: string };
+                const progress = (data.progress as number) || 0;
+                const total = (data.total as number) || 0;
+                setSubTaskStates((s) =>
+                  s.map((t, j) =>
+                    j === i
+                      ? {
+                          ...t,
+                          status: "loading" as const,
+                          hits: [...(t.hits || []), {
+                            content: hit?.content || "",
+                            url: hit?.url,
+                            source: hit?.source,
+                          }],
+                          progress,
+                          total,
+                        }
+                      : t
+                  )
+                );
               } else if (currentEvent === "step2_retrieval_done") {
                 const i = data.index as number;
                 const hits = (data.hits || []).map((h: { content?: string; url?: string; source?: string }) => ({
@@ -187,7 +227,17 @@ export default function AppPage() {
                   source: h.source,
                 }));
                 setSubTaskStates((s) =>
-                  s.map((t, j) => (j === i ? { ...t, status: "done" as const, hits } : t))
+                  s.map((t, j) =>
+                    j === i
+                      ? {
+                          ...t,
+                          status: "done" as const,
+                          hits,
+                          progress: hits.length,
+                          total: hits.length,
+                        }
+                      : t
+                  )
                 );
               } else if (currentEvent === "step3_summary_done") {
                 const i = data.index as number;
@@ -265,7 +315,13 @@ export default function AppPage() {
       key: "retrieval",
       label: "检索执行",
       state: hasTaskError ? "error" : retrievalActive ? "active" : retrievalDone ? "done" : hasRun ? "idle" : "idle",
-      text: hasTaskError ? "失败" : retrievalActive ? "检索中" : retrievalDone ? "完成" : "等待",
+      text: hasTaskError
+        ? "失败"
+        : retrievalActive && retrievalProgressTotal
+        ? `检索中 ${retrievalProgressCurrent}/${retrievalProgressTotal}`
+        : retrievalDone
+        ? "完成"
+        : "等待",
     },
     {
       key: "summary",
@@ -479,7 +535,9 @@ export default function AppPage() {
             const collapsedState = isCollapsed(i);
             const statusLabel =
               st.status === "loading"
-                ? "检索中"
+                ? st.total
+                  ? `检索中 ${st.progress || 0}/${st.total}`
+                  : "检索中"
                 : st.status === "error"
                 ? "失败"
                 : st.status === "done"
@@ -530,9 +588,16 @@ export default function AppPage() {
                 >
                   <div className="border-t border-slate-100 px-5 pb-5">
                     {st.status === "loading" && (
-                      <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-                        <span className="status-dot status-dot--active" aria-hidden="true" />
-                        正在检索与拉取正文…
+                      <div className="mt-3 space-y-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <span className="status-dot status-dot--active" aria-hidden="true" />
+                          正在检索与拉取正文…
+                          {st.total ? (
+                            <span className="text-xs text-slate-400">
+                              {st.progress || 0}/{st.total}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     )}
                     {st.status === "error" && st.error && (
