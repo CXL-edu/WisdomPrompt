@@ -86,7 +86,8 @@ _WEBFETCH_TIMEOUT = 15.0
 _WEBFETCH_TIMEOUT_FAST = 6.0
 _JINA_TIMEOUT = 20.0
 _JINA_TIMEOUT_FAST = 8.0
-_FAST_FAIL_DOMAINS = ("zhuanlan.zhihu.com", "zhihu.com")
+_FAST_FAIL_DOMAINS = ("zhuanlan.zhihu.com", "zhihu.com", "blog.csdn.net")
+_JINA_READER_PREFIX = "https://r.jina.ai/"
 
 # Readability 结果过短或含常见错误文案时，回退到旧 webfetch
 _READABILITY_MIN_LEN = 150
@@ -214,17 +215,18 @@ def _readability_to_markdown(html: str) -> Optional[str]:
 
 
 async def _jina_read(
-    url: str, timeout: float = _JINA_TIMEOUT
+    url: str, timeout: float = _JINA_TIMEOUT, api_key: str = ""
 ) -> tuple[Optional[str], Optional[str]]:
     """Jina Reader GET; returns (content, error).
-    不使用 API Key，走无 Key 模式：0 token 消耗，限 20 RPM。
+    默认走无 Key 模式；若提供 api_key，则走 Key 模式。
     """
     reader_url = f"https://r.jina.ai/{url}"
     headers = {
         "Accept": "application/json",
-        # 不传 Authorization，不扣 Jina token
         "X-Token-Budget": "16000",  # 限制单次返回长度，避免超长页
     }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             resp = await client.get(reader_url, headers=headers)
@@ -247,9 +249,17 @@ async def fetch_content(url: str) -> dict:
     """
     settings = get_settings()
 
-    is_fast_fail = any(domain in url for domain in _FAST_FAIL_DOMAINS)
+    is_reader_proxy = url.startswith(_JINA_READER_PREFIX)
+    is_fast_fail = (not is_reader_proxy) and any(
+        domain in url for domain in _FAST_FAIL_DOMAINS
+    )
+    is_csdn = "blog.csdn.net" in url
     webfetch_timeout = _WEBFETCH_TIMEOUT_FAST if is_fast_fail else _WEBFETCH_TIMEOUT
     jina_timeout = _JINA_TIMEOUT_FAST if is_fast_fail else _JINA_TIMEOUT
+
+    if url.startswith(_JINA_READER_PREFIX):
+        # Avoid double-wrapping when caller passes r.jina.ai URL directly.
+        url = url[len(_JINA_READER_PREFIX) :]
 
     # GitHub blob 链接直接拉 raw 文件，避免 Readability 抽到错误区域
     if _is_github_blob_url(url):
@@ -279,16 +289,22 @@ async def fetch_content(url: str) -> dict:
             return {"content": content, "url": url, "source": "webfetch"}
         logger.info("webfetch_failed_retry", url=url, error=err)
 
-    if is_fast_fail:
-        raise RuntimeError(f"Content fetch failed (fast-fail): {err}")
     if not settings.JINA_READER_ENABLED:
+        if is_fast_fail and not is_csdn:
+            raise RuntimeError(
+                f"Content fetch failed (fast-fail): {err or 'unknown error'}"
+            )
         raise RuntimeError(f"Content fetch failed (webfetch): {err}")
     day, count, tokens = _read_jina_usage()
     if count >= settings.JINA_DAILY_LIMIT_COUNT:
         raise RuntimeError("Jina daily request limit reached")
-    content, jina_err = await _jina_read(url, timeout=jina_timeout)
+    # Prefer free mode by default; keep key logic for override.
+    api_key = settings.JINA_API_KEY if settings.JINA_USE_API_KEY else ""
+    if api_key:
+        logger.info("jina_reader_with_key", url=url[:80])
+    content, jina_err = await _jina_read(url, timeout=jina_timeout, api_key=api_key)
     if content is None:
-        raise RuntimeError(f"Jina fetch failed: {jina_err}")
+        raise RuntimeError(f"Jina fetch failed: {jina_err or 'unknown error'}")
     new_tokens = tokens + _estimate_tokens(content)
     if new_tokens > settings.JINA_DAILY_LIMIT_TOKENS:
         raise RuntimeError("Jina daily token limit reached")

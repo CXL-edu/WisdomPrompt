@@ -1,4 +1,5 @@
 """Web search: brave / exa / serper via SEARCH_SOURCE. Returns title, url, description per hit."""
+
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +28,10 @@ async def _search_brave(query: str, count: int, api_key: str) -> List[dict[str, 
         resp.raise_for_status()
     data = resp.json()
     results = data.get("web", {}).get("results", [])
-    return [_normalize_hit(r.get("title", ""), r.get("url", ""), r.get("description", "")) for r in results]
+    return [
+        _normalize_hit(r.get("title", ""), r.get("url", ""), r.get("description", ""))
+        for r in results
+    ]
 
 
 async def _search_serper(query: str, num: int, api_key: str) -> List[dict[str, str]]:
@@ -48,7 +52,9 @@ async def _search_serper(query: str, num: int, api_key: str) -> List[dict[str, s
     ]
 
 
-def _search_exa_sync(query: str, num_results: int, api_key: str) -> List[dict[str, str]]:
+def _search_exa_sync(
+    query: str, num_results: int, api_key: str
+) -> List[dict[str, str]]:
     try:
         from exa_py import Exa
     except ImportError:
@@ -61,7 +67,11 @@ def _search_exa_sync(query: str, num_results: int, api_key: str) -> List[dict[st
     resp = exa.search(query, num_results=num_results)
     results = getattr(resp, "results", []) or []
     return [
-        _normalize_hit(getattr(r, "title", "") or "", getattr(r, "url", "") or "", getattr(r, "text", "") or getattr(r, "description", "") or "")
+        _normalize_hit(
+            getattr(r, "title", "") or "",
+            getattr(r, "url", "") or "",
+            getattr(r, "text", "") or getattr(r, "description", "") or "",
+        )
         for r in results
     ]
 
@@ -74,18 +84,39 @@ async def search_web(query: str, count: int = 10) -> List[dict[str, str]]:
     """Run web search using SEARCH_SOURCE (brave / exa / serper). Returns list of {title, url, description}. Fallback to serper/exa when brave key missing."""
     settings = get_settings()
     source = settings.SEARCH_SOURCE
-    if source == "brave" and settings.BRAVE_API_KEY:
-        out = await _search_brave(query, count, settings.BRAVE_API_KEY)
-        if out:
-            return out
-        logger.warning("brave_returned_empty", query=query[:80])
-    if source == "serper" or (source == "brave" and not settings.BRAVE_API_KEY):
-        return await _search_serper(query, count, settings.SERPER_API_KEY)
-    if source == "exa":
-        return await _search_exa(query, count, settings.EXA_API_KEY)
-    if settings.SERPER_API_KEY:
-        return await _search_serper(query, count, settings.SERPER_API_KEY)
-    if settings.EXA_API_KEY:
-        return await _search_exa(query, count, settings.EXA_API_KEY)
+    order = ["brave", "serper", "exa"]
+    if source in order:
+        order.remove(source)
+        order.insert(0, source)
+
+    for candidate in order:
+        if candidate == "brave":
+            if not settings.BRAVE_API_KEY:
+                logger.warning("brave_search_no_api_key")
+                continue
+            out = await _search_brave(query, count, settings.BRAVE_API_KEY)
+            if out:
+                return out
+            logger.warning("brave_returned_empty", query=query[:80])
+            continue
+        if candidate == "serper":
+            if not settings.SERPER_API_KEY:
+                logger.warning("serper_search_no_api_key")
+                continue
+            out = await _search_serper(query, count, settings.SERPER_API_KEY)
+            if out:
+                return out
+            logger.warning("serper_returned_empty", query=query[:80])
+            continue
+        if candidate == "exa":
+            if not settings.EXA_API_KEY:
+                logger.warning("exa_search_no_api_key")
+                continue
+            out = await _search_exa(query, count, settings.EXA_API_KEY)
+            if out:
+                return out
+            logger.warning("exa_returned_empty", query=query[:80])
+            continue
+
     logger.warning("no_search_api_key")
     return []
