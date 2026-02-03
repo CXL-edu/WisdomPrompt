@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// 生产挂到 /wisdom-prompt 时用同源路径，否则开发用 localhost:8000
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.BASE_URL?.startsWith("/wisdom-prompt")
+    ? import.meta.env.BASE_URL.replace(/\/$/, "")
+    : "http://localhost:8000");
 const WORKFLOW_DECOMPOSE = `${API_BASE}/api/v1/workflow/decompose`;
 const WORKFLOW_STREAM = `${API_BASE}/api/v1/workflow/stream`;
 

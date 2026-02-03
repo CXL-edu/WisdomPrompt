@@ -5,8 +5,16 @@ export default function Home() {
     <div className="page-container pb-20 pt-14">
       <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div className="space-y-8 fade-up">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            智能问答引擎
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              智能问答引擎
+            </span>
+            <a
+              href="/"
+              className="text-xs text-slate-500 hover:text-slate-700 hover:underline"
+            >
+              数源智能主站
+            </a>
           </div>
           <h1 className="font-display text-4xl font-semibold leading-tight text-slate-900 sm:text-5xl lg:text-6xl">
             WisdomPrompt

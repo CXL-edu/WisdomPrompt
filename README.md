@@ -48,6 +48,21 @@ npm run dev
 - 后端 CORS 已允许 `http://localhost:5173`
 - 前端默认请求 `http://localhost:8000`，可通过 `frontend/.env` 设置 `VITE_API_BASE_URL`
 
+### 5. 子路径部署
+
+挂到主站子路径 `/wisdom-prompt` 时见主站 **DEPLOY_NGINX_WISDOMPROMPT.md**；前端在 `frontend/.env` 设 `VITE_API_BASE_URL=https://你的域名/wisdom-prompt`。
+
+### 6. PM2 管理（生产）
+
+前置：`npm i -g pm2`，后端 venv + 依赖 + `.env`，前端 `cd frontend && npm run build`。
+
+```bash
+pm2 start ecosystem.config.cjs   # 启动
+pm2 stop ecosystem.config.cjs    # 停止
+pm2 restart ecosystem.config.cjs
+pm2 logs
+```
+
 ## 配置说明
 
 - **.env**（项目根）：`SEARCH_SOURCE`（brave/exa/serper，建议 serper 或配置好 `BRAVE_API_KEY`）、`SERPER_API_KEY`、`JINA_READER_ENABLED`、`LLM_MODEL_ID`、`OPENAI_API_KEY`、`GEMINI_API_KEY` 等

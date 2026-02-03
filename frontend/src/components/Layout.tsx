@@ -7,10 +7,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="pointer-events-none absolute -right-32 top-0 h-72 w-72 rounded-full bg-blue-200/50 blur-3xl" />
       <nav className="nav-shell">
         <div className="page-container flex items-center justify-between py-4">
-          <NavLink to="/" className="font-display text-xl font-semibold tracking-tight text-slate-900">
-            WisdomPrompt
-          </NavLink>
+          <div className="flex items-center gap-3">
+            <a
+              href="/"
+              className="text-sm font-medium text-slate-500 hover:text-slate-700"
+              title="返回数源智能主站"
+            >
+              数源智能
+            </a>
+            <span className="text-slate-300">/</span>
+            <NavLink to="/" className="font-display text-xl font-semibold tracking-tight text-slate-900">
+              WisdomPrompt
+            </NavLink>
+          </div>
           <div className="flex items-center gap-6">
+            <a
+              href="/product"
+              className="nav-link"
+              title="表格数据分析"
+            >
+              数据分析
+            </a>
             <NavLink
               to="/about"
               className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}
