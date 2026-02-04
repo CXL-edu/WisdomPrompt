@@ -63,18 +63,30 @@ pm2 restart ecosystem.config.cjs
 pm2 logs
 ```
 
-## 本地安全检查（pre-commit）
+## 本地安全检查（commit / push 前）
 
-本项目使用 pre-commit + gitleaks 在提交前自动检查是否存在密钥、Token、密码等敏感信息，避免误提交到远程仓库。
+本项目通过 **仓库内 Git 钩子**（`.githooks`）统一做提交与推送前检查：
 
-首次在本机使用本仓库时，建议执行：
+- **pre-commit**：pre-commit 框架（YAML、尾随空格、合并冲突等）
+- **pre-push**：gitleaks 全仓库扫描，避免密钥、Token、密码等敏感信息被推送
+
+**克隆或拉取本仓库后，只需在本机执行一次：**
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+（或手动执行：`git config core.hooksPath .githooks`）
+
+建议再安装 pre-commit 与 gitleaks，以便检查生效：
 
 ```bash
 pip install pre-commit
-pre-commit install
+pre-commit install-hooks
+# gitleaks 请按官方文档安装：https://github.com/gitleaks/gitleaks
 ```
 
-之后每次在本仓库中运行 `git commit` 时，都会自动触发安全检查；如检测到疑似敏感信息，提交会被阻止并在终端给出提示。
+之后每次 `git commit` / `git push` 都会自动跑上述检查；未安装时对应钩子会跳过并提示。
 
 ## 配置说明
 

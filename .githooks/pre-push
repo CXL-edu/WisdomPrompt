@@ -1,0 +1,21 @@
+#!/bin/bash
+
+echo "[pre-push] 运行 gitleaks 全仓库扫描..."
+
+if ! command -v gitleaks &>/dev/null; then
+  echo "[pre-push] 未安装 gitleaks，跳过扫描（建议在本地安装 gitleaks 做推送前检查）。"
+  exit 0
+fi
+
+# 对整个仓库做一次保护性扫描，避免历史代码中有泄露
+gitleaks protect --verbose --redact --source . --no-git
+RESULT=$?
+
+if [ $RESULT -ne 0 ]; then
+  echo "[pre-push] gitleaks 检测到潜在敏感信息，已阻止 push。"
+  echo "请根据提示清理相关内容（或确认是误报后调整规则）后再试。"
+  exit $RESULT
+fi
+
+echo "[pre-push] gitleaks 检查通过，可以安全 push。"
+exit 0

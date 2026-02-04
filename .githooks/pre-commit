@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo "[pre-commit] 运行 pre-commit 检查..."
+
+if ! command -v pre-commit &>/dev/null; then
+  echo "[pre-commit] 未安装 pre-commit，跳过（建议运行: pip install pre-commit && pre-commit install-hooks）。"
+  exit 0
+fi
+
+pre-commit run --hook-stage pre-commit
+exit $?

@@ -9,4 +9,4 @@ repos:
       - id: trailing-whitespace
 
   # 提交阶段不再运行 gitleaks，避免拖慢 git commit
-  # gitleaks 已在 .git/hooks/pre-push 中对 push 前的代码做全量扫描
+  # gitleaks 已在 .githooks/pre-push 中对 push 前的代码做全量扫描
