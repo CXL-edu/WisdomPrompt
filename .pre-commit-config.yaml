@@ -1,0 +1,12 @@
+repos:
+  # 基础代码检查（轻量，提交时运行）
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # 提交阶段不再运行 gitleaks，避免拖慢 git commit
+  # gitleaks 已在 .git/hooks/pre-push 中对 push 前的代码做全量扫描

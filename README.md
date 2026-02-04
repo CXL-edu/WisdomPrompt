@@ -63,6 +63,19 @@ pm2 restart ecosystem.config.cjs
 pm2 logs
 ```
 
+## 本地安全检查（pre-commit）
+
+本项目使用 pre-commit + gitleaks 在提交前自动检查是否存在密钥、Token、密码等敏感信息，避免误提交到远程仓库。
+
+首次在本机使用本仓库时，建议执行：
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+之后每次在本仓库中运行 `git commit` 时，都会自动触发安全检查；如检测到疑似敏感信息，提交会被阻止并在终端给出提示。
+
 ## 配置说明
 
 - **.env**（项目根）：`SEARCH_SOURCE`（brave/exa/serper，建议 serper 或配置好 `BRAVE_API_KEY`）、`SERPER_API_KEY`、`JINA_READER_ENABLED`、`LLM_MODEL_ID`、`OPENAI_API_KEY`、`GEMINI_API_KEY` 等
